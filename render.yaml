@@ -1,0 +1,30 @@
+services:
+  - type: web
+    name: cruvels-mail-sync
+    runtime: node
+    plan: free
+    region: oregon
+    buildCommand: npm ci
+    startCommand: npm run worker:web
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: MAIL_WORKER
+        value: "1"
+      - key: SYNC_INTERVAL_SECONDS
+        value: "30"
+      - key: EMAIL_PROVIDER_MODE
+        value: smtp_imap
+      - key: EMAIL_SYNC_ON_READ
+        value: "false"
+      - key: NEXT_PUBLIC_SUPABASE_URL
+        sync: false
+      - key: NEXT_PUBLIC_SUPABASE_ANON_KEY
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: MAILBOXES_CONFIG
+        sync: false

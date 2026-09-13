@@ -1,0 +1,26 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      CI: true
+      DATA_BACKEND: memory
+      EMAIL_PROVIDER_MODE: mock
+      JWT_SECRET: ci-only-jwt-secret-key-32-chars-minimum
+      NEXT_PUBLIC_APP_URL: http://localhost:3005
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run lint
+      - run: npm run build
