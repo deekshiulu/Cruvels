@@ -22,6 +22,10 @@ import {
   Check,
   X,
   Laptop,
+  RefreshCw,
+  Video,
+  ExternalLink,
+  Globe,
 } from 'lucide-react';
 import {
   AttendanceRecord,
@@ -30,6 +34,7 @@ import {
   LeaveRequest,
   INDIAN_HOLIDAYS_2026,
   PublicHolidayDefinition,
+  UserCalendarIntegration,
 } from '@/lib/db/types';
 import { getIndianDateString } from '@/lib/utils/date';
 import { clientCache } from '@/lib/cache/clientCache';
@@ -53,11 +58,21 @@ export default function AttendancePage() {
     record?: AttendanceRecord;
     holiday?: { name: string; type: string; description: string };
     event?: ScheduleEvent;
+    events?: ScheduleEvent[];
     leave?: LeaveRequest;
     isWeekend: boolean;
     isToday: boolean;
     isFuture: boolean;
   } | null>(null);
+
+  // Calendar External Sync Modal State
+  const [showSyncModal, setShowSyncModal] = useState(false);
+  const [integrations, setIntegrations] = useState<UserCalendarIntegration[]>([]);
+  const [syncing, setSyncing] = useState(false);
+  const [newIntegrationProvider, setNewIntegrationProvider] = useState<'google' | 'microsoft'>('google');
+  const [newIntegrationEmail, setNewIntegrationEmail] = useState('');
+  const [newIntegrationUrl, setNewIntegrationUrl] = useState('');
+  const [submittingIntegration, setSubmittingIntegration] = useState(false);
 
   // Add Holiday Modal State
   const [showAddHolidayModal, setShowAddHolidayModal] = useState(false);
@@ -99,11 +114,12 @@ export default function AttendancePage() {
 
   const fetchData = async () => {
     try {
-      const [attRes, meRes, schedRes, leaveRes] = await Promise.all([
+      const [attRes, meRes, schedRes, leaveRes, intRes] = await Promise.all([
         fetch('/api/attendance'),
         fetch('/api/auth/me'),
         fetch('/api/schedule'),
         fetch('/api/leaves'),
+        fetch('/api/calendar/integrations'),
       ]);
 
       if (attRes.ok) {
@@ -122,9 +138,90 @@ export default function AttendancePage() {
         const leaveData = await leaveRes.json();
         setLeaves(leaveData.leaves || []);
       }
+      if (intRes.ok) {
+        const intData = await intRes.json();
+        setIntegrations(intData.integrations || []);
+      }
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleTriggerSync = async (isSample = false) => {
+    setSyncing(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/calendar/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sample: isSample }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setNotification(data.message || 'Calendars synced successfully!');
+        const [schedRes, intRes] = await Promise.all([
+          fetch('/api/schedule'),
+          fetch('/api/calendar/integrations'),
+        ]);
+        if (schedRes.ok) {
+          const s = await schedRes.json();
+          setScheduleEvents(s.events || []);
+        }
+        if (intRes.ok) {
+          const i = await intRes.json();
+          setIntegrations(i.integrations || []);
+        }
+        setTimeout(() => setNotification(null), 5000);
+      } else {
+        setError(data.error || 'Failed to sync calendar.');
+      }
+    } catch {
+      setError('Network connection error while syncing calendars.');
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  const handleAddIntegration = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSubmittingIntegration(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/calendar/integrations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          provider: newIntegrationProvider,
+          accountEmail: newIntegrationEmail.trim(),
+          feedUrl: newIntegrationUrl.trim(),
+        }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setNotification(`${newIntegrationProvider === 'google' ? 'Google Calendar' : 'Microsoft Teams'} feed connected!`);
+        setNewIntegrationEmail('');
+        setNewIntegrationUrl('');
+        fetchData();
+        setTimeout(() => setNotification(null), 4000);
+      } else {
+        setError(data.error || 'Failed to connect calendar feed.');
+      }
+    } catch {
+      setError('Network error while saving integration.');
+    } finally {
+      setSubmittingIntegration(false);
+    }
+  };
+
+  const handleDeleteIntegration = async (id: string) => {
+    try {
+      const res = await fetch(`/api/calendar/integrations?id=${id}`, { method: 'DELETE' });
+      if (res.ok) {
+        setIntegrations((prev) => prev.filter((i) => i.id !== id));
+        setNotification('Calendar disconnected.');
+        setTimeout(() => setNotification(null), 3000);
+      }
+    } catch {}
   };
 
   useEffect(() => {
@@ -304,6 +401,7 @@ export default function AttendancePage() {
       record?: AttendanceRecord;
       holiday?: { name: string; type: string; description: string };
       event?: ScheduleEvent;
+      events?: ScheduleEvent[];
       leave?: LeaveRequest;
       weekday: string;
     }> = [];
@@ -338,7 +436,8 @@ export default function AttendancePage() {
       const record = myRecordsMap.get(dateStr);
       const holiday = holidayMap.get(dateStr);
       const leave = approvedLeavesMap.get(dateStr);
-      const event = scheduleEvents.find((e) => e.start_time.startsWith(dateStr) && e.event_type !== 'holiday');
+      const dayEvents = scheduleEvents.filter((e) => e.start_time.startsWith(dateStr) && e.event_type !== 'holiday');
+      const event = dayEvents[0];
 
       const weekday = dateObj.toLocaleDateString('en-IN', { weekday: 'long' });
 
@@ -352,6 +451,7 @@ export default function AttendancePage() {
         record,
         holiday,
         event,
+        events: dayEvents,
         leave,
         weekday,
       });
@@ -659,16 +759,26 @@ export default function AttendancePage() {
             </button>
           </div>
 
-          {/* Admin / Manager Add Holiday Action */}
-          {isAdminOrLead && (
+          <div className="flex items-center gap-2 flex-wrap">
             <button
-              onClick={() => setShowAddHolidayModal(true)}
-              className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 px-4 py-2 text-xs font-bold text-white shadow-sm hover:from-emerald-700 hover:to-teal-700 transition-all"
+              onClick={() => setShowSyncModal(true)}
+              className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-bold text-slate-700 shadow-xs hover:bg-slate-50 hover:border-slate-300 transition-all cursor-pointer"
             >
-              <Plus className="h-4 w-4" />
-              <span>+ Add Company Holiday / Event</span>
+              <RefreshCw className={`h-3.5 w-3.5 text-blue-600 ${syncing ? 'animate-spin' : ''}`} />
+              <span>Sync Google / Teams</span>
             </button>
-          )}
+
+            {/* Admin / Manager Add Holiday Action */}
+            {isAdminOrLead && (
+              <button
+                onClick={() => setShowAddHolidayModal(true)}
+                className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 px-4 py-2 text-xs font-bold text-white shadow-sm hover:from-emerald-700 hover:to-teal-700 transition-all cursor-pointer"
+              >
+                <Plus className="h-4 w-4" />
+                <span>+ Add Company Holiday / Event</span>
+              </button>
+            )}
+          </div>
         </div>
 
         {/* ========================================================================= */}
@@ -835,6 +945,7 @@ export default function AttendancePage() {
                           record: cell.record,
                           holiday: cell.holiday,
                           event: cell.event,
+                          events: cell.events,
                           leave: cell.leave,
                           isWeekend: cell.isWeekend,
                           isToday: cell.isToday,
@@ -921,8 +1032,39 @@ export default function AttendancePage() {
                           </div>
                         )}
 
-                        {/* 5. Weekend Off */}
-                        {cell.isWeekend && !hasRecord && !hasHoliday && (
+                        {/* 5. External & Internal Scheduled Meetings */}
+                        {cell.events && cell.events.length > 0 && (
+                          <div className="space-y-0.5 pt-0.5">
+                            {cell.events.slice(0, 2).map((ev: ScheduleEvent) => {
+                              const isGoogle = ev.source === 'google' || ev.sync_provider === 'google';
+                              const isTeams = ev.source === 'microsoft' || ev.sync_provider === 'microsoft';
+                              return (
+                                <div
+                                  key={ev.id}
+                                  className={`truncate rounded px-1.5 py-0.5 text-[8.5px] font-bold border flex items-center gap-1 ${
+                                    isGoogle
+                                      ? 'bg-amber-50/90 text-amber-900 border-amber-200'
+                                      : isTeams
+                                      ? 'bg-indigo-50/90 text-indigo-900 border-indigo-200'
+                                      : 'bg-blue-50/90 text-blue-900 border-blue-200'
+                                  }`}
+                                  title={`${ev.title}${ev.location ? ` (${ev.location})` : ''}`}
+                                >
+                                  {isGoogle ? '🌐 Meet' : isTeams ? '👥 Teams' : '📅 Sync'}
+                                  <span className="truncate">{ev.title}</span>
+                                </div>
+                              );
+                            })}
+                            {cell.events.length > 2 && (
+                              <div className="text-[8px] font-bold text-slate-500 pl-0.5">
+                                +{cell.events.length - 2} more
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {/* 6. Weekend Off */}
+                        {cell.isWeekend && !hasRecord && !hasHoliday && (!cell.events || cell.events.length === 0) && (
                           <span className="text-[10px] text-slate-300 font-medium hidden sm:inline-block">
                             Weekend
                           </span>
@@ -1165,12 +1307,93 @@ export default function AttendancePage() {
                     </div>
                   </div>
                 )}
+
+                {/* 4. Scheduled Meetings & External Sync */}
+                {selectedDayDetails.events && selectedDayDetails.events.length > 0 && (
+                  <div className="space-y-2 pt-2 border-t border-slate-100">
+                    <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                      Scheduled Meetings ({selectedDayDetails.events.length})
+                    </span>
+                    <div className="space-y-2">
+                      {selectedDayDetails.events.map((ev) => {
+                        const isGoogle = ev.source === 'google' || ev.sync_provider === 'google';
+                        const isTeams = ev.source === 'microsoft' || ev.sync_provider === 'microsoft';
+                        const startTimeFormatted = new Date(ev.start_time).toLocaleTimeString('en-IN', {
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        });
+                        const endTimeFormatted = new Date(ev.end_time).toLocaleTimeString('en-IN', {
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        });
+
+                        return (
+                          <div
+                            key={ev.id}
+                            className={`rounded-2xl p-3 border space-y-1.5 ${
+                              isGoogle
+                                ? 'bg-amber-50/70 border-amber-200 text-amber-950'
+                                : isTeams
+                                ? 'bg-indigo-50/70 border-indigo-200 text-indigo-950'
+                                : 'bg-blue-50/70 border-blue-200 text-blue-950'
+                            }`}
+                          >
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="font-bold text-xs">{ev.title}</span>
+                              <span
+                                className={`text-[9px] font-extrabold uppercase px-2 py-0.5 rounded-full border ${
+                                  isGoogle
+                                    ? 'bg-amber-100 text-amber-800 border-amber-300'
+                                    : isTeams
+                                    ? 'bg-indigo-100 text-indigo-800 border-indigo-300'
+                                    : 'bg-blue-100 text-blue-800 border-blue-300'
+                                }`}
+                              >
+                                {isGoogle ? 'Google Meet' : isTeams ? 'MS Teams' : 'Internal'}
+                              </span>
+                            </div>
+
+                            <div className="text-[11px] opacity-80 flex items-center gap-3">
+                              <span>🕒 {startTimeFormatted} - {endTimeFormatted}</span>
+                              {ev.location && <span>📍 {ev.location}</span>}
+                            </div>
+
+                            {ev.description && (
+                              <p className="text-[11px] opacity-75 line-clamp-2">{ev.description}</p>
+                            )}
+
+                            {ev.meeting_link && (
+                              <div className="pt-1">
+                                <a
+                                  href={ev.meeting_link}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-bold text-white shadow-xs transition-all ${
+                                    isGoogle
+                                      ? 'bg-emerald-600 hover:bg-emerald-700'
+                                      : isTeams
+                                      ? 'bg-indigo-600 hover:bg-indigo-700'
+                                      : 'bg-blue-600 hover:bg-blue-700'
+                                  }`}
+                                >
+                                  <Video className="h-3.5 w-3.5" />
+                                  <span>{isGoogle ? 'Join Google Meet' : isTeams ? 'Join Teams Meeting' : 'Join Call'}</span>
+                                  <ExternalLink className="h-3 w-3 opacity-75" />
+                                </a>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div className="pt-2 flex justify-end">
                 <button
                   onClick={() => setSelectedDayDetails(null)}
-                  className="rounded-xl border border-slate-200 px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 transition-all"
+                  className="rounded-xl border border-slate-200 px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 transition-all cursor-pointer"
                 >
                   Close
                 </button>
@@ -1267,6 +1490,193 @@ export default function AttendancePage() {
                     {submittingHoliday ? 'Saving...' : 'Add to Calendar'}
                   </button>
                 </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* ========================================================================= */}
+        {/* CALENDAR EXTERNAL SYNC & INTEGRATION MODAL */}
+        {/* ========================================================================= */}
+        {showSyncModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-xs p-4 animate-in fade-in">
+            <div className="w-full max-w-xl rounded-3xl bg-white p-6 sm:p-7 shadow-xl border border-slate-200 space-y-5 max-h-[90vh] overflow-y-auto">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3.5">
+                <div className="space-y-0.5">
+                  <span className="text-[10px] font-bold uppercase tracking-widest text-blue-600">
+                    External Calendar Protocols
+                  </span>
+                  <h3 className="text-lg font-extrabold text-slate-900 flex items-center gap-2">
+                    <Globe className="h-5 w-5 text-blue-600" />
+                    <span>Google Calendar & Microsoft Teams Sync</span>
+                  </h3>
+                </div>
+                <button
+                  onClick={() => setShowSyncModal(false)}
+                  className="rounded-xl p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition-colors cursor-pointer"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+
+              {/* Instant 1-Click Quick Demo Sync Action */}
+              <div className="rounded-2xl bg-gradient-to-r from-blue-50 via-indigo-50 to-purple-50 border border-blue-200/80 p-4 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h4 className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                      <Sparkles className="h-4 w-4 text-blue-600" />
+                      <span>1-Click Test Sync (Google Meet & Teams Standups)</span>
+                    </h4>
+                    <p className="text-[11px] text-slate-600 mt-0.5">
+                      Instantly sync sample recurring Google Meet and MS Teams team syncs for testing right now.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={syncing}
+                    onClick={() => handleTriggerSync(true)}
+                    className="shrink-0 flex items-center gap-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white px-3.5 py-2 text-xs font-bold shadow-xs transition-all cursor-pointer disabled:opacity-50"
+                  >
+                    <RefreshCw className={`h-3.5 w-3.5 ${syncing ? 'animate-spin' : ''}`} />
+                    <span>{syncing ? 'Syncing...' : 'Sync Sample Feeds'}</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Connected Feeds List */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-slate-900">Your Connected Calendars</span>
+                  <button
+                    type="button"
+                    disabled={syncing}
+                    onClick={() => handleTriggerSync(false)}
+                    className="text-xs font-bold text-blue-600 hover:text-blue-700 flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                  >
+                    <RefreshCw className={`h-3 w-3 ${syncing ? 'animate-spin' : ''}`} />
+                    <span>Sync All Active Feeds</span>
+                  </button>
+                </div>
+
+                {integrations.length === 0 ? (
+                  <div className="rounded-2xl border border-dashed border-slate-200 p-4 text-center text-xs text-slate-500">
+                    No custom external calendar feeds configured yet. Add your Google or Microsoft iCal URL below.
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {integrations.map((item) => (
+                      <div
+                        key={item.id}
+                        className="flex items-center justify-between rounded-2xl border border-slate-200 p-3 bg-slate-50/50"
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <span className="text-lg">
+                            {item.provider === 'google' ? '🌐' : '👥'}
+                          </span>
+                          <div>
+                            <div className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                              <span>{item.provider === 'google' ? 'Google Calendar' : 'Microsoft Teams / 365'}</span>
+                              <span className="rounded-full bg-emerald-100 text-emerald-800 text-[9px] px-2 py-0.2 font-bold">
+                                Active
+                              </span>
+                            </div>
+                            <div className="text-[10px] text-slate-500 truncate max-w-[280px]">
+                              {item.account_email || item.feed_url}
+                            </div>
+                          </div>
+                        </div>
+
+                        <button
+                          onClick={() => handleDeleteIntegration(item.id)}
+                          className="rounded-xl p-1.5 text-slate-400 hover:bg-rose-50 hover:text-rose-600 transition-colors cursor-pointer"
+                          title="Disconnect Calendar"
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Add Custom Feed Form */}
+              <form onSubmit={handleAddIntegration} className="rounded-2xl border border-slate-200 p-4 space-y-3 bg-slate-50/70">
+                <span className="block text-xs font-bold text-slate-900">Connect a New Calendar Feed</span>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setNewIntegrationProvider('google')}
+                    className={`rounded-xl border p-2.5 text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                      newIntegrationProvider === 'google'
+                        ? 'bg-amber-50 border-amber-300 text-amber-800 shadow-xs'
+                        : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                    }`}
+                  >
+                    <span>🌐 Google Calendar</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setNewIntegrationProvider('microsoft')}
+                    className={`rounded-xl border p-2.5 text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                      newIntegrationProvider === 'microsoft'
+                        ? 'bg-indigo-50 border-indigo-300 text-indigo-800 shadow-xs'
+                        : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                    }`}
+                  >
+                    <span>👥 Microsoft Teams</span>
+                  </button>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="block text-[11px] font-bold text-slate-700">Account Email (Optional)</label>
+                  <input
+                    type="email"
+                    value={newIntegrationEmail}
+                    onChange={(e) => setNewIntegrationEmail(e.target.value)}
+                    placeholder={newIntegrationProvider === 'google' ? 'you@gmail.com' : 'you@company.onmicrosoft.com'}
+                    className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="block text-[11px] font-bold text-slate-700">
+                    Private iCal / ICS Feed URL <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="url"
+                    required
+                    value={newIntegrationUrl}
+                    onChange={(e) => setNewIntegrationUrl(e.target.value)}
+                    placeholder={
+                      newIntegrationProvider === 'google'
+                        ? 'https://calendar.google.com/calendar/ical/.../basic.ics'
+                        : 'https://outlook.office365.com/owa/calendar/.../reachcalendar.ics'
+                    }
+                    className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 font-mono text-[11px]"
+                  />
+                  <p className="text-[10px] text-slate-500">
+                    {newIntegrationProvider === 'google'
+                      ? 'Google Calendar: Settings -> Integrate calendar -> Secret address in iCal format'
+                      : 'Outlook/Teams: Settings -> Calendar -> Shared calendars -> Publish a calendar -> ICS link'}
+                  </p>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={submittingIntegration}
+                  className="w-full flex items-center justify-center gap-2 rounded-xl bg-slate-900 hover:bg-black text-white px-4 py-2.5 text-xs font-bold shadow-xs transition-all cursor-pointer disabled:opacity-50"
+                >
+                  {submittingIntegration ? (
+                    <RefreshCw className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <>
+                      <span>Connect & Ingest Calendar</span>
+                      <ChevronRight className="h-4 w-4" />
+                    </>
+                  )}
+                </button>
               </form>
             </div>
           </div>

@@ -253,6 +253,7 @@ export interface Notice {
 }
 
 export type EventType = 'meeting' | 'shift' | 'holiday' | 'event';
+export type EventSource = 'internal' | 'google' | 'microsoft' | 'external';
 
 export interface ScheduleEvent {
   id: string;
@@ -266,6 +267,11 @@ export interface ScheduleEvent {
   attendee_ids: string[];
   created_by: string;
   created_at: string;
+  source?: EventSource;
+  external_event_id?: string;
+  meeting_link?: string;
+  sync_provider?: 'google' | 'microsoft';
+  sync_account_email?: string;
 }
 
 export interface PublicHolidayDefinition {
@@ -368,4 +374,17 @@ export interface PushSubscriptionItem {
   };
   device_name?: string;
   created_at: string;
+}
+
+export interface UserCalendarIntegration {
+  id: string;
+  user_id: string;
+  provider: 'google' | 'microsoft';
+  account_email?: string;
+  feed_url?: string;
+  is_active: boolean;
+  last_synced_at?: string;
+  sync_error?: string;
+  created_at: string;
+  updated_at: string;
 }

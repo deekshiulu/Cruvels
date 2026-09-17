@@ -11,13 +11,19 @@ import {
   CheckCircle2,
   AlertCircle,
   X,
+  RefreshCw,
+  Video,
+  ExternalLink,
+  Globe,
+  Sparkles,
 } from 'lucide-react';
-import { ScheduleEvent } from '@/lib/db/types';
+import { ScheduleEvent, UserCalendarIntegration } from '@/lib/db/types';
 
 export default function SchedulePage() {
   const [events, setEvents] = useState<ScheduleEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [typeFilter, setTypeFilter] = useState('');
+  const [syncing, setSyncing] = useState(false);
 
   const [showAddModal, setShowAddModal] = useState(false);
   const [title, setTitle] = useState('');
@@ -39,6 +45,30 @@ export default function SchedulePage() {
       }
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleSyncCalendars = async (sample = false) => {
+    setSyncing(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/calendar/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sample }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setNotification(data.message || 'External calendars synced successfully!');
+        fetchSchedule();
+        setTimeout(() => setNotification(null), 4000);
+      } else {
+        setError(data.error || 'Failed to sync external calendars.');
+      }
+    } catch {
+      setError('Network connection error while syncing.');
+    } finally {
+      setSyncing(false);
     }
   };
 
@@ -84,7 +114,23 @@ export default function SchedulePage() {
     }
   };
 
-  const getEventBadge = (type: string) => {
+  const getEventBadge = (type: string, source?: string) => {
+    if (source === 'google') {
+      return (
+        <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 text-amber-800 px-2.5 py-0.5 text-[10px] font-extrabold border border-amber-300">
+          <span>🌐</span>
+          <span>GOOGLE MEET</span>
+        </span>
+      );
+    }
+    if (source === 'microsoft') {
+      return (
+        <span className="inline-flex items-center gap-1 rounded-full bg-indigo-50 text-indigo-800 px-2.5 py-0.5 text-[10px] font-extrabold border border-indigo-300">
+          <span>👥</span>
+          <span>MS TEAMS</span>
+        </span>
+      );
+    }
     switch (type) {
       case 'meeting':
         return <span className="rounded-full bg-blue-50 text-blue-700 px-2.5 py-0.5 text-[10px] font-bold border border-blue-200">MEETING</span>;
@@ -97,7 +143,12 @@ export default function SchedulePage() {
     }
   };
 
-  const filteredEvents = typeFilter ? events.filter((e) => e.event_type === typeFilter) : events;
+  const filteredEvents = events.filter((e) => {
+    if (!typeFilter) return true;
+    if (typeFilter === 'google') return e.source === 'google' || e.sync_provider === 'google';
+    if (typeFilter === 'microsoft') return e.source === 'microsoft' || e.sync_provider === 'microsoft';
+    return e.event_type === typeFilter;
+  });
 
   return (
     <AppShell>
@@ -114,13 +165,24 @@ export default function SchedulePage() {
             </div>
           </div>
 
-          <button
-            onClick={() => setShowAddModal(true)}
-            className="glow-btn-primary flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-bold text-white tracking-wide shadow-sm"
-          >
-            <Plus className="h-4 w-4" />
-            <span>Add Event / Meeting</span>
-          </button>
+          <div className="flex items-center gap-2 flex-wrap">
+            <button
+              onClick={() => handleSyncCalendars(true)}
+              disabled={syncing}
+              className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-bold text-slate-700 shadow-xs hover:bg-slate-50 hover:border-slate-300 transition-all cursor-pointer disabled:opacity-50"
+            >
+              <RefreshCw className={`h-3.5 w-3.5 text-blue-600 ${syncing ? 'animate-spin' : ''}`} />
+              <span>{syncing ? 'Syncing...' : 'Sync Google & Teams'}</span>
+            </button>
+
+            <button
+              onClick={() => setShowAddModal(true)}
+              className="glow-btn-primary flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-bold text-white tracking-wide shadow-sm cursor-pointer"
+            >
+              <Plus className="h-4 w-4" />
+              <span>Add Event / Meeting</span>
+            </button>
+          </div>
         </div>
 
         {/* Notifications */}
@@ -132,18 +194,25 @@ export default function SchedulePage() {
         )}
 
         {/* Filter Pills */}
-        <div className="flex items-center gap-2">
-          {['', 'meeting', 'shift', 'holiday', 'event'].map((type) => (
+        <div className="flex items-center gap-2 flex-wrap">
+          {[
+            { id: '', label: 'All Events' },
+            { id: 'meeting', label: 'Meetings' },
+            { id: 'google', label: 'Google Meet' },
+            { id: 'microsoft', label: 'MS Teams' },
+            { id: 'shift', label: 'Shifts' },
+            { id: 'holiday', label: 'Holidays' },
+          ].map((item) => (
             <button
-              key={type}
-              onClick={() => setTypeFilter(type)}
-              className={`rounded-xl px-3.5 py-1.5 text-xs font-semibold capitalize transition-all ${
-                typeFilter === type
+              key={item.id}
+              onClick={() => setTypeFilter(item.id)}
+              className={`rounded-xl px-3.5 py-1.5 text-xs font-semibold capitalize transition-all cursor-pointer ${
+                typeFilter === item.id
                   ? 'bg-purple-50 text-purple-700 border border-purple-200 shadow-sm'
                   : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
               }`}
             >
-              {type ? `${type}s` : 'All Events'}
+              {item.label}
             </button>
           ))}
         </div>
@@ -156,16 +225,16 @@ export default function SchedulePage() {
               className="rounded-3xl bg-white p-6 border border-slate-200 shadow-sm space-y-4 hover:border-purple-300 transition-all flex flex-col justify-between"
             >
               <div className="flex items-start justify-between gap-3">
-                <div className="space-y-1">
-                  <div className="flex items-center gap-2">
-                    {getEventBadge(evt.event_type)}
+                <div className="space-y-1.5">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {getEventBadge(evt.event_type, evt.source || evt.sync_provider)}
                     <h3 className="text-sm font-bold text-slate-900">{evt.title}</h3>
                   </div>
                   <p className="text-xs text-slate-600 leading-relaxed">{evt.description}</p>
                 </div>
               </div>
 
-              <div className="space-y-1.5 text-xs text-slate-600 pt-3 border-t border-slate-100">
+              <div className="space-y-2 text-xs text-slate-600 pt-3 border-t border-slate-100">
                 <div className="flex items-center gap-2 font-mono text-[11px] text-slate-700">
                   <Clock className="h-3.5 w-3.5 text-purple-600" />
                   <span>
@@ -182,6 +251,32 @@ export default function SchedulePage() {
                   <div className="flex items-center gap-2 text-slate-500">
                     <MapPin className="h-3.5 w-3.5 text-slate-400" />
                     <span>{evt.location}</span>
+                  </div>
+                )}
+                {evt.meeting_link && (
+                  <div className="pt-1">
+                    <a
+                      href={evt.meeting_link}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-white shadow-xs transition-all ${
+                        evt.source === 'google' || evt.sync_provider === 'google'
+                          ? 'bg-emerald-600 hover:bg-emerald-700'
+                          : evt.source === 'microsoft' || evt.sync_provider === 'microsoft'
+                          ? 'bg-indigo-600 hover:bg-indigo-700'
+                          : 'bg-blue-600 hover:bg-blue-700'
+                      }`}
+                    >
+                      <Video className="h-3.5 w-3.5" />
+                      <span>
+                        {evt.source === 'google' || evt.sync_provider === 'google'
+                          ? 'Join Google Meet'
+                          : evt.source === 'microsoft' || evt.sync_provider === 'microsoft'
+                          ? 'Join Teams Meeting'
+                          : 'Join Meeting'}
+                      </span>
+                      <ExternalLink className="h-3 w-3 opacity-80" />
+                    </a>
                   </div>
                 )}
               </div>

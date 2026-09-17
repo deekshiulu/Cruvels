@@ -23,6 +23,7 @@ import {
   TaskItem,
   AppNotification,
   PushSubscriptionItem,
+  UserCalendarIntegration,
 } from './types';
 
 import { hashPassword, verifyPassword } from '../auth/password';
@@ -653,6 +654,7 @@ export class UnifiedDataStore {
   public tasks: TaskItem[] = [];
   public notifications: AppNotification[] = [];
   public pushSubscriptions: PushSubscriptionItem[] = [];
+  public userCalendarIntegrations: UserCalendarIntegration[] = [];
   public vapidKeys: { publicKey: string; privateKey: string } | null = null;
   private attendanceLocks = new Map<string, Promise<void>>();
 
@@ -701,6 +703,7 @@ export class UnifiedDataStore {
       tasks: this.tasks,
       notifications: this.notifications,
       pushSubscriptions: this.pushSubscriptions,
+      userCalendarIntegrations: this.userCalendarIntegrations,
       vapidKeys: this.vapidKeys,
     };
 
@@ -760,6 +763,7 @@ export class UnifiedDataStore {
             if (Array.isArray(data.tasks)) this.tasks = data.tasks;
             if (Array.isArray(data.notifications)) this.notifications = data.notifications;
             if (Array.isArray(data.pushSubscriptions)) this.pushSubscriptions = data.pushSubscriptions;
+            if (Array.isArray(data.userCalendarIntegrations)) this.userCalendarIntegrations = data.userCalendarIntegrations;
             if (data.vapidKeys?.publicKey && data.vapidKeys?.privateKey) {
               this.vapidKeys = data.vapidKeys;
             }
@@ -798,6 +802,7 @@ export class UnifiedDataStore {
     this.tasks = [];
     this.notifications = [];
     this.pushSubscriptions = [];
+    this.userCalendarIntegrations = [];
   }
 
   // -------------------------------------------------------------
@@ -1609,6 +1614,110 @@ export class UnifiedDataStore {
       return true;
     }
     return false;
+  }
+
+  public async upsertScheduleEvents(
+    events: Omit<ScheduleEvent, 'id' | 'created_at'>[]
+  ): Promise<{ added: number; updated: number }> {
+    let added = 0;
+    let updated = 0;
+    const now = new Date().toISOString();
+
+    for (const ev of events) {
+      let existingIndex = -1;
+      if (ev.external_event_id) {
+        existingIndex = this.scheduleEvents.findIndex(
+          (e) => e.external_event_id === ev.external_event_id && e.created_by === ev.created_by
+        );
+      }
+
+      if (existingIndex >= 0) {
+        const existing = this.scheduleEvents[existingIndex];
+        this.scheduleEvents[existingIndex] = {
+          ...existing,
+          title: ev.title,
+          description: ev.description,
+          event_type: ev.event_type,
+          start_time: ev.start_time,
+          end_time: ev.end_time,
+          location: ev.location || existing.location,
+          source: ev.source || existing.source,
+          meeting_link: ev.meeting_link || existing.meeting_link,
+          sync_provider: ev.sync_provider || existing.sync_provider,
+          sync_account_email: ev.sync_account_email || existing.sync_account_email,
+        };
+        updated++;
+      } else {
+        const newEvent: ScheduleEvent = {
+          ...ev,
+          id: `evt_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`,
+          created_at: now,
+        };
+        this.scheduleEvents.push(newEvent);
+        added++;
+      }
+    }
+
+    if (added > 0 || updated > 0) {
+      this.persistToDisk();
+    }
+    return { added, updated };
+  }
+
+  public async getUserCalendarIntegrations(userId: string): Promise<UserCalendarIntegration[]> {
+    return this.userCalendarIntegrations.filter((i) => i.user_id === userId);
+  }
+
+  public async saveUserCalendarIntegration(data: {
+    userId: string;
+    provider: 'google' | 'microsoft';
+    accountEmail?: string;
+    feedUrl?: string;
+  }): Promise<UserCalendarIntegration> {
+    const existingIndex = this.userCalendarIntegrations.findIndex(
+      (i) => i.user_id === data.userId && i.provider === data.provider && (data.feedUrl ? i.feed_url === data.feedUrl : true)
+    );
+
+    const now = new Date().toISOString();
+    if (existingIndex >= 0) {
+      const existing = this.userCalendarIntegrations[existingIndex];
+      const updated: UserCalendarIntegration = {
+        ...existing,
+        account_email: data.accountEmail || existing.account_email,
+        feed_url: data.feedUrl || existing.feed_url,
+        is_active: true,
+        updated_at: now,
+      };
+      this.userCalendarIntegrations[existingIndex] = updated;
+      this.persistToDisk();
+      return updated;
+    }
+
+    const newIntegration: UserCalendarIntegration = {
+      id: `cal_int_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`,
+      user_id: data.userId,
+      provider: data.provider,
+      account_email: data.accountEmail,
+      feed_url: data.feedUrl,
+      is_active: true,
+      created_at: now,
+      updated_at: now,
+    };
+    this.userCalendarIntegrations.push(newIntegration);
+    this.persistToDisk();
+    return newIntegration;
+  }
+
+  public async deleteUserCalendarIntegration(id: string, userId: string): Promise<boolean> {
+    const prevLen = this.userCalendarIntegrations.length;
+    this.userCalendarIntegrations = this.userCalendarIntegrations.filter(
+      (i) => !(i.id === id && i.user_id === userId)
+    );
+    const removed = this.userCalendarIntegrations.length < prevLen;
+    if (removed) {
+      this.persistToDisk();
+    }
+    return removed;
   }
 
   // -------------------------------------------------------------

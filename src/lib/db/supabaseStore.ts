@@ -19,6 +19,7 @@ import {
   LeaveBalances,
   Notice,
   ScheduleEvent,
+  UserCalendarIntegration,
   Note,
   TaskItem,
   AppNotification,
@@ -786,6 +787,111 @@ export class SupabaseDataStore {
     const { error } = await db().from('schedule_events').delete().eq('id', id);
     if (error) err(error, 'Failed to delete schedule event');
     return true;
+  }
+
+  public async upsertScheduleEvents(
+    events: Omit<ScheduleEvent, 'id' | 'created_at'>[]
+  ): Promise<{ added: number; updated: number }> {
+    let added = 0;
+    let updated = 0;
+    const now = new Date().toISOString();
+
+    for (const ev of events) {
+      if (ev.external_event_id) {
+        const { data: existing } = await db()
+          .from('schedule_events')
+          .select('id')
+          .eq('external_event_id', ev.external_event_id)
+          .eq('created_by', ev.created_by)
+          .maybeSingle();
+
+        if (existing) {
+          const { error } = await db()
+            .from('schedule_events')
+            .update({
+              title: ev.title,
+              description: ev.description,
+              event_type: ev.event_type,
+              start_time: ev.start_time,
+              end_time: ev.end_time,
+              location: ev.location,
+              source: ev.source,
+              meeting_link: ev.meeting_link,
+              sync_provider: ev.sync_provider,
+              sync_account_email: ev.sync_account_email,
+            })
+            .eq('id', existing.id);
+          if (!error) updated++;
+          continue;
+        }
+      }
+
+      const row = {
+        ...ev,
+        id: `evt-${crypto.randomUUID()}`,
+        created_at: now,
+      };
+      const { error } = await db().from('schedule_events').insert(row);
+      if (!error) added++;
+    }
+
+    return { added, updated };
+  }
+
+  public async getUserCalendarIntegrations(userId: string): Promise<UserCalendarIntegration[]> {
+    try {
+      const { data, error } = await db()
+        .from('user_calendar_integrations')
+        .select('*')
+        .eq('user_id', userId);
+      if (error) return [];
+      return (data || []) as UserCalendarIntegration[];
+    } catch {
+      return [];
+    }
+  }
+
+  public async saveUserCalendarIntegration(data: {
+    userId: string;
+    provider: 'google' | 'microsoft';
+    accountEmail?: string;
+    feedUrl?: string;
+  }): Promise<UserCalendarIntegration> {
+    const now = new Date().toISOString();
+    const row = {
+      id: `cal_int_${crypto.randomUUID()}`,
+      user_id: data.userId,
+      provider: data.provider,
+      account_email: data.accountEmail || null,
+      feed_url: data.feedUrl || null,
+      is_active: true,
+      created_at: now,
+      updated_at: now,
+    };
+    try {
+      const { data: created, error } = await db()
+        .from('user_calendar_integrations')
+        .upsert(row)
+        .select('*')
+        .single();
+      if (error || !created) return row as UserCalendarIntegration;
+      return created as UserCalendarIntegration;
+    } catch {
+      return row as UserCalendarIntegration;
+    }
+  }
+
+  public async deleteUserCalendarIntegration(id: string, userId: string): Promise<boolean> {
+    try {
+      const { error } = await db()
+        .from('user_calendar_integrations')
+        .delete()
+        .eq('id', id)
+        .eq('user_id', userId);
+      return !error;
+    } catch {
+      return true;
+    }
   }
 
   public async getNotes(userId: string): Promise<Note[]> {
