@@ -32,10 +32,14 @@ export async function GET(
 
     const show360 = canViewEmployee360(user, employee);
     if (!show360) {
-      const { leave_balances: _balances, ...directoryEmployee } = employee;
+      const { leave_balances: _balances, phone: _phone, personal_email: _pEmail, ...directoryEmployee } = employee;
       return NextResponse.json({
         success: true,
-        employee: directoryEmployee,
+        employee: {
+          ...directoryEmployee,
+          phone: null,
+          personal_email: null,
+        },
         attendance: { summary: null, recent: [] },
         tasks: { summary: null, list: [] },
         leaves: { balances: null, history: [] },

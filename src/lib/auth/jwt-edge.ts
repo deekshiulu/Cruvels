@@ -27,6 +27,7 @@ export type EdgeSessionPayload = {
     status?: string;
     role?: string;
     username?: string;
+    mustChangePassword?: boolean;
   };
 };
 

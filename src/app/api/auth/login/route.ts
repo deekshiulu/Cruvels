@@ -17,7 +17,9 @@ const LoginSchema = z.object({
 const DUMMY_HASH = '$pbkdf2$100000$0123456789abcdef0123456789abcdef$0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
 
 export async function POST(req: NextRequest) {
-  const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || '127.0.0.1';
+  const rawIp = req.headers.get('x-real-ip') || req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || '127.0.0.1';
+  const isIpValid = /^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$|^[a-fA-F0-9:]+$/.test(rawIp);
+  const ip = isIpValid ? rawIp : '127.0.0.1';
   
   // 1. Rate Limiting Check (10 attempts per minute per IP)
   const rateCheck = await checkRateLimit(`login:${ip}`, 10, 60);
@@ -40,6 +42,15 @@ export async function POST(req: NextRequest) {
 
     const { usernameOrEmail, username, email, password } = parseRes.data;
     const cleanInput = (usernameOrEmail || username || email || '').trim();
+
+    // 1b. Identifier-level Rate Limiting Check (15 attempts per 5 minutes per account/alias)
+    const identCheck = await checkRateLimit(`login:ident:${cleanInput.toLowerCase()}`, 15, 300);
+    if (!identCheck.allowed) {
+      return NextResponse.json(
+        { error: `Too many login attempts for this account. Please try again in ${identCheck.resetInSec} seconds.`, success: false },
+        { status: 429 }
+      );
+    }
 
     // 2. Find user by username or assigned alias
     let user = await dataStore.getUserByUsername(cleanInput);

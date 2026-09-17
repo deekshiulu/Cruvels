@@ -48,6 +48,7 @@ export async function createSessionToken(user: User, assignedAliases: string[]):
     status: user.status,
     assignedAliases,
     primaryAlias,
+    mustChangePassword: Boolean(user.must_change_password),
   };
 
   const pwdFingerprint = crypto.createHash('sha256').update(user.password_hash + user.status).digest('hex').substring(0, 16);

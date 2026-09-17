@@ -48,3 +48,32 @@ export async function POST(req: NextRequest) {
     return handleApiError(err);
   }
 }
+
+export async function DELETE(req: NextRequest) {
+  try {
+    const user = await requireActiveUser(req);
+    const { searchParams } = new URL(req.url);
+    const id = searchParams.get('id');
+    if (!id) {
+      return NextResponse.json({ error: 'Event ID is required.', success: false }, { status: 400 });
+    }
+
+    const events = await dataStore.getScheduleEvents();
+    const event = events.find((e) => e.id === id);
+    if (!event) {
+      return NextResponse.json({ error: 'Event not found.', success: false }, { status: 404 });
+    }
+
+    if (user.role !== 'admin' && user.role !== 'manager' && event.created_by !== user.id) {
+      return NextResponse.json(
+        { error: 'Forbidden. You are only authorized to delete schedule events you created.', success: false },
+        { status: 403 }
+      );
+    }
+
+    await dataStore.deleteScheduleEvent(id);
+    return NextResponse.json({ success: true, message: 'Schedule event deleted successfully.' });
+  } catch (err) {
+    return handleApiError(err);
+  }
+}

@@ -69,7 +69,26 @@ export async function PUT(
     let assignedToName: string | undefined = undefined;
     if (parsed.data.assigned_to_id) {
       const assignee = await dataStore.getEmployeeById(parsed.data.assigned_to_id);
-      if (assignee) assignedToName = assignee.name;
+      if (!assignee) {
+        return NextResponse.json({ error: 'Assignee employee record not found.', success: false }, { status: 404 });
+      }
+
+      if (user.role !== 'admin' && user.role !== 'manager') {
+        const myEmp = await dataStore.getEmployeeByUserId(user.id);
+        if (!myEmp) {
+          return NextResponse.json({ error: 'No employee record linked to your account.', success: false }, { status: 403 });
+        }
+        const isSelf = myEmp.id === assignee.id;
+        const isSameSquad = Boolean(myEmp.group_id && myEmp.group_id === assignee.group_id);
+        if (!isSelf && !isSameSquad) {
+          return NextResponse.json({
+            error: 'Forbidden. You are only authorized to assign tasks to yourself or members of your squad.',
+            success: false,
+          }, { status: 403 });
+        }
+      }
+
+      assignedToName = assignee.name;
     }
 
     const updated = await dataStore.updateTask(

@@ -11,6 +11,7 @@ import {
   Department,
   Group,
   Employee,
+  CreateEmployeeInput,
   AttendanceRecord,
   AttendanceStatus,
   LeaveRequest,
@@ -1158,12 +1159,35 @@ export class UnifiedDataStore {
     return emp ? { ...emp } : null;
   }
 
-  public async createEmployee(data: Omit<Employee, 'id' | 'created_at' | 'updated_at'>): Promise<Employee> {
+  public async createEmployee(data: CreateEmployeeInput): Promise<Employee> {
     const id = `emp-${Date.now().toString(36)}`;
     const now = new Date().toISOString();
+    const firstName = data.first_name || '';
+    const lastName = data.last_name || '';
+    const fullName = data.name || `${firstName} ${lastName}`.trim() || 'Employee';
     const newEmp: Employee = {
-      ...data,
       id,
+      user_id: data.user_id || '',
+      employee_code: data.employee_code || `CRUV-${Math.floor(100 + Math.random() * 900)}`,
+      first_name: firstName,
+      last_name: lastName,
+      name: fullName,
+      email: data.email,
+      phone: data.phone || '+91 90000 00000',
+      department_id: data.department_id,
+      department_name: data.department_name || '',
+      group_id: data.group_id || null,
+      group_name: data.group_name || null,
+      is_group_leader: Boolean(data.is_group_leader),
+      designation: data.designation || 'Team Member',
+      tagline: data.tagline || '',
+      personal_email: data.personal_email || '',
+      joining_date: data.joining_date || now.split('T')[0],
+      manager_id: data.manager_id || null,
+      manager_name: data.manager_name || null,
+      status: data.status || 'ACTIVE',
+      leave_balances: data.leave_balances || { casual: 12, sick: 10, annual: 15, unpaid: 0 },
+      created_by_id: data.created_by_id || null,
       created_at: now,
       updated_at: now,
     };
@@ -1365,7 +1389,7 @@ export class UnifiedDataStore {
     const newReq: LeaveRequest = {
       ...data,
       id,
-      status: 'PENDING',
+      status: (data as any).status || 'PENDING',
       created_at: now,
       updated_at: now,
     };
@@ -1395,6 +1419,7 @@ export class UnifiedDataStore {
       ...existing,
       status,
       reviewed_by: reviewerId,
+      reviewed_by_id: reviewerId,
       reviewed_by_name: reviewerName,
       reviewed_at: new Date().toISOString(),
       rejection_reason: rejectionReason || null,
@@ -1404,7 +1429,7 @@ export class UnifiedDataStore {
 
     const typeKey = existing.leave_type.toLowerCase() as keyof LeaveBalances;
     const emp = this.employees.find((e) => e.id === existing.employee_id);
-    if (emp && existing.leave_type !== 'UNPAID' && emp.leave_balances[typeKey] !== undefined) {
+    if (emp && existing.leave_type !== 'UNPAID' && emp.leave_balances && emp.leave_balances[typeKey] !== undefined) {
       if (status === 'APPROVED' && previousStatus !== 'APPROVED') {
         emp.leave_balances[typeKey] = Math.max(0, emp.leave_balances[typeKey] - existing.days_count);
       } else if (status === 'CANCELLED' && previousStatus === 'APPROVED') {
@@ -1568,6 +1593,16 @@ export class UnifiedDataStore {
     this.scheduleEvents.push(newEvent);
     this.persistToDisk();
     return { ...newEvent };
+  }
+
+  public async deleteScheduleEvent(id: string): Promise<boolean> {
+    const initialLen = this.scheduleEvents.length;
+    this.scheduleEvents = this.scheduleEvents.filter((e) => e.id !== id);
+    if (this.scheduleEvents.length < initialLen) {
+      this.persistToDisk();
+      return true;
+    }
+    return false;
   }
 
   // -------------------------------------------------------------

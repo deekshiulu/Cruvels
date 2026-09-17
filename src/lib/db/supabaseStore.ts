@@ -11,6 +11,7 @@ import {
   Department,
   Group,
   Employee,
+  CreateEmployeeInput,
   AttendanceRecord,
   AttendanceStatus,
   LeaveRequest,
@@ -430,10 +431,38 @@ export class SupabaseDataStore {
     return data ? mapEmployee(data) : null;
   }
 
-  public async createEmployee(data: Omit<Employee, 'id' | 'created_at' | 'updated_at'>): Promise<Employee> {
+  public async createEmployee(data: CreateEmployeeInput): Promise<Employee> {
     const id = `emp-${Date.now().toString(36)}`;
     const now = new Date().toISOString();
-    const row = { ...data, id, created_at: now, updated_at: now };
+    const firstName = data.first_name || '';
+    const lastName = data.last_name || '';
+    const fullName = data.name || `${firstName} ${lastName}`.trim() || 'Employee';
+    const row = {
+      id,
+      user_id: data.user_id || '',
+      employee_code: data.employee_code || `CRUV-${Math.floor(100 + Math.random() * 900)}`,
+      first_name: firstName,
+      last_name: lastName,
+      name: fullName,
+      email: data.email,
+      phone: data.phone || '+91 90000 00000',
+      department_id: data.department_id,
+      department_name: data.department_name || '',
+      group_id: data.group_id || null,
+      group_name: data.group_name || null,
+      is_group_leader: Boolean(data.is_group_leader),
+      designation: data.designation || 'Team Member',
+      tagline: data.tagline || '',
+      personal_email: data.personal_email || '',
+      joining_date: data.joining_date || now.split('T')[0],
+      manager_id: data.manager_id || null,
+      manager_name: data.manager_name || null,
+      status: data.status || 'ACTIVE',
+      leave_balances: data.leave_balances || { casual: 12, sick: 10, annual: 15, unpaid: 0 },
+      created_by_id: data.created_by_id || null,
+      created_at: now,
+      updated_at: now,
+    };
     const { data: created, error } = await db().from('employees').insert(row).select('*').single();
     if (error) err(error, 'Failed to create employee');
     if (row.group_id) {
@@ -751,6 +780,12 @@ export class SupabaseDataStore {
     const { data: created, error } = await db().from('schedule_events').insert(row).select('*').single();
     if (error) err(error, 'Failed to create event');
     return { ...created, attendee_ids: created.attendee_ids || [] };
+  }
+
+  public async deleteScheduleEvent(id: string): Promise<boolean> {
+    const { error } = await db().from('schedule_events').delete().eq('id', id);
+    if (error) err(error, 'Failed to delete schedule event');
+    return true;
   }
 
   public async getNotes(userId: string): Promise<Note[]> {

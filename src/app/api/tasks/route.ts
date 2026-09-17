@@ -53,6 +53,29 @@ export async function POST(req: NextRequest) {
 
     const { title, description, status, priority, dueDate, assignedToId } = parseRes.data;
     const assignee = await dataStore.getEmployeeById(assignedToId);
+    if (!assignee) {
+      return NextResponse.json({ error: 'Assignee employee record not found.', success: false }, { status: 404 });
+    }
+
+    // Authorization Boundary (BOLA protection):
+    // Admin and Manager can assign tasks to anyone.
+    // Employees and Interns can only assign tasks to themselves or members in their own squad.
+    if (user.role !== 'admin' && user.role !== 'manager') {
+      const myEmp = await dataStore.getEmployeeByUserId(user.id);
+      if (!myEmp) {
+        return NextResponse.json({ error: 'No employee record linked to your account.', success: false }, { status: 403 });
+      }
+
+      const isSelf = myEmp.id === assignee.id;
+      const isSameSquad = Boolean(myEmp.group_id && myEmp.group_id === assignee.group_id);
+
+      if (!isSelf && !isSameSquad) {
+        return NextResponse.json({
+          error: 'Forbidden. You are only authorized to assign tasks to yourself or members of your squad.',
+          success: false,
+        }, { status: 403 });
+      }
+    }
 
     const task = await dataStore.createTask({
       title,

@@ -156,9 +156,20 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (user?.mustChangePassword && pathname !== '/profile') {
-      router.replace('/profile?force=password');
+      window.location.href = '/profile?force=password';
     }
-  }, [user, pathname, router]);
+  }, [user, pathname]);
+
+  const navigateTo = (path: string) => {
+    if (user?.mustChangePassword) {
+      if (pathname !== '/profile') {
+        window.location.href = '/profile?force=password';
+      }
+      return;
+    }
+    router.push(path);
+    setMobileMenuOpen(false);
+  };
 
   useEffect(() => {
     fetchSessionAndUnread();
@@ -406,6 +417,19 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   if (!user) return null;
 
+  if (user.mustChangePassword && pathname !== '/profile') {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-[#F8FAFC]">
+        <div className="flex flex-col items-center gap-3">
+          <div className="h-9 w-9 animate-spin rounded-full border-3 border-amber-600 border-t-transparent" />
+          <p className="text-xs text-amber-800 font-medium tracking-wide">
+            Password update required. Redirecting to profile setup...
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   const isNavActive = (path: string) => {
     if (path === '/dashboard') return pathname === '/dashboard' || pathname === '/';
     return pathname.startsWith(path);
@@ -451,6 +475,19 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             </button>
           </div>
 
+          {/* Password Required Notice Banner */}
+          {user.mustChangePassword && (
+            <div className="rounded-2xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900 shadow-xs">
+              <div className="flex items-center gap-1.5 font-bold">
+                <Lock className="h-3.5 w-3.5 text-amber-600 shrink-0" />
+                <span>Password Setup Required</span>
+              </div>
+              <p className="mt-1 text-[11px] text-amber-700 leading-tight">
+                Workspace modules are locked until you create a new password.
+              </p>
+            </div>
+          )}
+
           {/* Navigation Section 1: Workforce Operations */}
           <div className="space-y-1">
             <div className="px-2 text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1.5">
@@ -458,13 +495,12 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             </div>
 
             <button
-              onClick={() => {
-                router.push('/dashboard');
-                setMobileMenuOpen(false);
-              }}
+              onClick={() => navigateTo('/dashboard')}
               className={`group flex w-full items-center justify-between rounded-xl px-3 py-2 text-xs font-semibold transition-all ${
                 isNavActive('/dashboard')
                   ? 'bg-blue-50 text-blue-700 border border-blue-200 shadow-sm'
+                  : user.mustChangePassword
+                  ? 'text-slate-400 hover:bg-slate-50 cursor-not-allowed'
                   : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
               }`}
             >
@@ -472,17 +508,17 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                 <LayoutDashboard className={`h-4 w-4 ${isNavActive('/dashboard') ? 'text-blue-600' : 'text-slate-400 group-hover:text-slate-700'}`} />
                 <span>Dashboard</span>
               </div>
+              {user.mustChangePassword && <Lock className="h-3 w-3 text-slate-400" />}
             </button>
 
             {(user.role === 'admin' || user.role === 'manager' || user.role === 'team_lead') && (
               <button
-                onClick={() => {
-                  router.push('/employees');
-                  setMobileMenuOpen(false);
-                }}
+                onClick={() => navigateTo('/employees')}
                 className={`group flex w-full items-center justify-between rounded-xl px-3 py-2 text-xs font-semibold transition-all ${
                   isNavActive('/employees')
                     ? 'bg-blue-50 text-blue-700 border border-blue-200 shadow-sm'
+                    : user.mustChangePassword
+                    ? 'text-slate-400 hover:bg-slate-50 cursor-not-allowed'
                     : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
                 }`}
               >
@@ -490,17 +526,17 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                   <Users className={`h-4 w-4 ${isNavActive('/employees') ? 'text-blue-600' : 'text-slate-400 group-hover:text-slate-700'}`} />
                   <span>Employee Directory</span>
                 </div>
+                {user.mustChangePassword && <Lock className="h-3 w-3 text-slate-400" />}
               </button>
             )}
 
             <button
-              onClick={() => {
-                router.push('/attendance');
-                setMobileMenuOpen(false);
-              }}
+              onClick={() => navigateTo('/attendance')}
               className={`group flex w-full items-center justify-between rounded-xl px-3 py-2 text-xs font-semibold transition-all ${
                 isNavActive('/attendance')
                   ? 'bg-blue-50 text-blue-700 border border-blue-200 shadow-sm'
+                  : user.mustChangePassword
+                  ? 'text-slate-400 hover:bg-slate-50 cursor-not-allowed'
                   : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
               }`}
             >
@@ -508,16 +544,16 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                 <Clock className={`h-4 w-4 ${isNavActive('/attendance') ? 'text-blue-600' : 'text-slate-400 group-hover:text-slate-700'}`} />
                 <span>Attendance</span>
               </div>
+              {user.mustChangePassword && <Lock className="h-3 w-3 text-slate-400" />}
             </button>
 
             <button
-              onClick={() => {
-                router.push('/leaves');
-                setMobileMenuOpen(false);
-              }}
+              onClick={() => navigateTo('/leaves')}
               className={`group flex w-full items-center justify-between rounded-xl px-3 py-2 text-xs font-semibold transition-all ${
                 isNavActive('/leaves')
                   ? 'bg-blue-50 text-blue-700 border border-blue-200 shadow-sm'
+                  : user.mustChangePassword
+                  ? 'text-slate-400 hover:bg-slate-50 cursor-not-allowed'
                   : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
               }`}
             >
@@ -525,16 +561,16 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                 <CalendarDays className={`h-4 w-4 ${isNavActive('/leaves') ? 'text-blue-600' : 'text-slate-400 group-hover:text-slate-700'}`} />
                 <span>Time Off & Leaves</span>
               </div>
+              {user.mustChangePassword && <Lock className="h-3 w-3 text-slate-400" />}
             </button>
 
             <button
-              onClick={() => {
-                router.push('/departments');
-                setMobileMenuOpen(false);
-              }}
+              onClick={() => navigateTo('/departments')}
               className={`group flex w-full items-center justify-between rounded-xl px-3 py-2 text-xs font-semibold transition-all ${
                 isNavActive('/departments')
                   ? 'bg-blue-50 text-blue-700 border border-blue-200 shadow-sm'
+                  : user.mustChangePassword
+                  ? 'text-slate-400 hover:bg-slate-50 cursor-not-allowed'
                   : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
               }`}
             >
@@ -542,6 +578,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                 <Building2 className={`h-4 w-4 ${isNavActive('/departments') ? 'text-blue-600' : 'text-slate-400 group-hover:text-slate-700'}`} />
                 <span>{user.role === 'admin' ? 'Departments & Squads' : 'Company Departments'}</span>
               </div>
+              {user.mustChangePassword && <Lock className="h-3 w-3 text-slate-400" />}
             </button>
           </div>
 
@@ -552,13 +589,12 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             </div>
 
             <button
-              onClick={() => {
-                router.push('/tasks');
-                setMobileMenuOpen(false);
-              }}
+              onClick={() => navigateTo('/tasks')}
               className={`group flex w-full items-center justify-between rounded-xl px-3 py-2 text-xs font-semibold transition-all ${
                 isNavActive('/tasks')
                   ? 'bg-blue-50 text-blue-700 border border-blue-200 shadow-sm'
+                  : user.mustChangePassword
+                  ? 'text-slate-400 hover:bg-slate-50 cursor-not-allowed'
                   : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
               }`}
             >
@@ -566,16 +602,16 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                 <CheckSquare className={`h-4 w-4 ${isNavActive('/tasks') ? 'text-blue-600' : 'text-slate-400 group-hover:text-slate-700'}`} />
                 <span>Tasks (Kanban)</span>
               </div>
+              {user.mustChangePassword && <Lock className="h-3 w-3 text-slate-400" />}
             </button>
 
             <button
-              onClick={() => {
-                router.push('/schedule');
-                setMobileMenuOpen(false);
-              }}
+              onClick={() => navigateTo('/schedule')}
               className={`group flex w-full items-center justify-between rounded-xl px-3 py-2 text-xs font-semibold transition-all ${
                 isNavActive('/schedule')
                   ? 'bg-blue-50 text-blue-700 border border-blue-200 shadow-sm'
+                  : user.mustChangePassword
+                  ? 'text-slate-400 hover:bg-slate-50 cursor-not-allowed'
                   : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
               }`}
             >
@@ -583,16 +619,16 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                 <Calendar className={`h-4 w-4 ${isNavActive('/schedule') ? 'text-blue-600' : 'text-slate-400 group-hover:text-slate-700'}`} />
                 <span>Schedule & Shifts</span>
               </div>
+              {user.mustChangePassword && <Lock className="h-3 w-3 text-slate-400" />}
             </button>
 
             <button
-              onClick={() => {
-                router.push('/notes');
-                setMobileMenuOpen(false);
-              }}
+              onClick={() => navigateTo('/notes')}
               className={`group flex w-full items-center justify-between rounded-xl px-3 py-2 text-xs font-semibold transition-all ${
                 isNavActive('/notes')
                   ? 'bg-blue-50 text-blue-700 border border-blue-200 shadow-sm'
+                  : user.mustChangePassword
+                  ? 'text-slate-400 hover:bg-slate-50 cursor-not-allowed'
                   : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
               }`}
             >
@@ -600,16 +636,16 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                 <StickyNote className={`h-4 w-4 ${isNavActive('/notes') ? 'text-blue-600' : 'text-slate-400 group-hover:text-slate-700'}`} />
                 <span>Personal Notes</span>
               </div>
+              {user.mustChangePassword && <Lock className="h-3 w-3 text-slate-400" />}
             </button>
 
             <button
-              onClick={() => {
-                router.push('/notices');
-                setMobileMenuOpen(false);
-              }}
+              onClick={() => navigateTo('/notices')}
               className={`group flex w-full items-center justify-between rounded-xl px-3 py-2 text-xs font-semibold transition-all ${
                 isNavActive('/notices')
                   ? 'bg-blue-50 text-blue-700 border border-blue-200 shadow-sm'
+                  : user.mustChangePassword
+                  ? 'text-slate-400 hover:bg-slate-50 cursor-not-allowed'
                   : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
               }`}
             >
@@ -617,6 +653,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                 <Megaphone className={`h-4 w-4 ${isNavActive('/notices') ? 'text-blue-600' : 'text-slate-400 group-hover:text-slate-700'}`} />
                 <span>Notice Board</span>
               </div>
+              {user.mustChangePassword && <Lock className="h-3 w-3 text-slate-400" />}
             </button>
           </div>
 
@@ -629,13 +666,12 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               </div>
 
               <button
-                onClick={() => {
-                  router.push('/admin');
-                  setMobileMenuOpen(false);
-                }}
+                onClick={() => navigateTo('/admin')}
                 className={`group flex w-full items-center justify-between rounded-xl px-3 py-2 text-xs font-semibold transition-all ${
                   pathname.startsWith('/admin')
                     ? 'bg-purple-50 text-purple-700 border border-purple-200 shadow-sm'
+                    : user.mustChangePassword
+                    ? 'text-purple-400 hover:bg-purple-50/30 cursor-not-allowed'
                     : 'text-purple-700 hover:bg-purple-50/60 hover:text-purple-900'
                 }`}
               >
@@ -643,7 +679,11 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                   <Shield className="h-4 w-4 text-purple-600" />
                   <span>Admin Center & Logs</span>
                 </div>
-                <ChevronRight className="h-3.5 w-3.5 text-purple-500 opacity-60 group-hover:opacity-100" />
+                {user.mustChangePassword ? (
+                  <Lock className="h-3.5 w-3.5 text-purple-400" />
+                ) : (
+                  <ChevronRight className="h-3.5 w-3.5 text-purple-500 opacity-60 group-hover:opacity-100" />
+                )}
               </button>
             </div>
           )}
@@ -696,10 +736,12 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             {/* Top Bar Mail Quick Access Group */}
             <div className="flex items-center rounded-2xl bg-slate-100 p-1 border border-slate-200 text-xs font-bold">
               <button
-                onClick={() => router.push('/mail/inbox')}
+                onClick={() => navigateTo('/mail/inbox')}
                 className={`flex items-center gap-1.5 rounded-xl px-2.5 sm:px-3 py-1.5 transition-all ${
                   isMailActive('/mail/inbox')
                     ? 'bg-white text-blue-700 shadow-sm border border-slate-200/60'
+                    : user.mustChangePassword
+                    ? 'text-slate-400 cursor-not-allowed'
                     : 'text-slate-600 hover:text-slate-900'
                 }`}
                 title="Mail Inbox"
@@ -714,10 +756,12 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               </button>
 
               <button
-                onClick={() => router.push('/mail/sent')}
+                onClick={() => navigateTo('/mail/sent')}
                 className={`flex items-center gap-1.5 rounded-xl px-2.5 sm:px-3 py-1.5 transition-all ${
                   isMailActive('/mail/sent')
                     ? 'bg-white text-blue-700 shadow-sm border border-slate-200/60'
+                    : user.mustChangePassword
+                    ? 'text-slate-400 cursor-not-allowed'
                     : 'text-slate-600 hover:text-slate-900'
                 }`}
                 title="Sent Mail"
@@ -727,10 +771,12 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               </button>
 
               <button
-                onClick={() => router.push('/mail/drafts')}
+                onClick={() => navigateTo('/mail/drafts')}
                 className={`flex items-center gap-1.5 rounded-xl px-2.5 sm:px-3 py-1.5 transition-all ${
                   isMailActive('/mail/drafts')
                     ? 'bg-white text-blue-700 shadow-sm border border-slate-200/60'
+                    : user.mustChangePassword
+                    ? 'text-slate-400 cursor-not-allowed'
                     : 'text-slate-600 hover:text-slate-900'
                 }`}
                 title="Drafts"
@@ -740,10 +786,12 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               </button>
 
               <button
-                onClick={() => router.push('/mail/compose')}
+                onClick={() => navigateTo('/mail/compose')}
                 className={`flex items-center gap-1.5 rounded-xl px-2.5 sm:px-3 py-1.5 transition-all ${
                   isMailActive('/mail/compose')
                     ? 'bg-blue-600 text-white shadow-sm'
+                    : user.mustChangePassword
+                    ? 'bg-slate-300 text-slate-500 cursor-not-allowed shadow-none'
                     : 'bg-blue-600/90 text-white hover:bg-blue-600 shadow-xs'
                 }`}
                 title="Compose Email"

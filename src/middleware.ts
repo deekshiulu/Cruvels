@@ -69,6 +69,36 @@ export async function middleware(req: NextRequest) {
     return res;
   }
 
+  // Enforce mandatory password update before accessing other application pages
+  if (payload.user?.mustChangePassword) {
+    if (
+      !pathname.startsWith('/profile') &&
+      !pathname.startsWith('/api/') &&
+      !pathname.startsWith('/_next')
+    ) {
+      const profileUrl = req.nextUrl.clone();
+      profileUrl.pathname = '/profile';
+      profileUrl.searchParams.set('force', 'password');
+      return NextResponse.redirect(profileUrl);
+    }
+  }
+
+  // Edge Role-Based Access Control: Protect /admin and /api/admin from non-admin users
+  if (pathname.startsWith('/admin') || pathname.startsWith('/api/admin')) {
+    if (payload.user?.role !== 'admin') {
+      if (pathname.startsWith('/api/')) {
+        return NextResponse.json(
+          { error: 'Forbidden. Administrative privileges required.', success: false },
+          { status: 403 }
+        );
+      }
+      const dashboardUrl = req.nextUrl.clone();
+      dashboardUrl.pathname = '/dashboard';
+      dashboardUrl.searchParams.set('error', 'unauthorized');
+      return NextResponse.redirect(dashboardUrl);
+    }
+  }
+
   return NextResponse.next();
 }
 

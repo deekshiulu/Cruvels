@@ -52,13 +52,13 @@ export default function LoginPage() {
       }
 
       if (data.user?.mustChangePassword) {
-        router.replace('/profile?force=password');
+        window.location.href = '/profile?force=password';
         return;
       }
       if (data.user?.role === 'admin') {
-        router.push('/admin');
+        window.location.href = '/admin';
       } else {
-        router.push('/dashboard');
+        window.location.href = '/dashboard';
       }
     } catch {
       setError('Network connection error. Please verify your connection and try again.');
@@ -164,6 +164,39 @@ export default function LoginPage() {
               )}
             </button>
           </form>
+
+          {/* Quick Test Credentials Helper */}
+          <div className="mt-5 pt-4 border-t border-slate-100">
+            <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-2 text-center">
+              Quick Test Accounts
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setUsernameOrEmail('admin');
+                  setPassword('Password123!');
+                  setError(null);
+                }}
+                className="flex flex-col items-center rounded-xl border border-slate-200 bg-slate-50/80 px-2.5 py-1.5 text-[11px] font-medium text-slate-700 hover:bg-blue-50 hover:border-blue-300 hover:text-blue-700 transition-colors cursor-pointer"
+              >
+                <span className="font-bold">Admin</span>
+                <span className="text-[10px] text-slate-400 font-mono">admin</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setUsernameOrEmail('rahul');
+                  setPassword('Password123!');
+                  setError(null);
+                }}
+                className="flex flex-col items-center rounded-xl border border-slate-200 bg-slate-50/80 px-2.5 py-1.5 text-[11px] font-medium text-slate-700 hover:bg-blue-50 hover:border-blue-300 hover:text-blue-700 transition-colors cursor-pointer"
+              >
+                <span className="font-bold">Intern</span>
+                <span className="text-[10px] text-slate-400 font-mono">rahul</span>
+              </button>
+            </div>
+          </div>
 
           {/* Support / Help footer */}
           <div className="mt-6 border-t border-slate-100 pt-4 text-center">

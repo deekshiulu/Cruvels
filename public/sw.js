@@ -25,7 +25,22 @@ self.addEventListener('push', function (event) {
 
 self.addEventListener('notificationclick', function (event) {
   event.notification.close();
-  const targetUrl = event.notification.data?.url || '/dashboard';
+  const rawUrl = event.notification.data?.url || '/dashboard';
+  
+  // Security: Ensure targetUrl is relative or strictly from this origin to prevent open-redirect / phishing
+  let targetUrl = '/dashboard';
+  if (typeof rawUrl === 'string') {
+    if (rawUrl.startsWith('/') && !rawUrl.startsWith('//')) {
+      targetUrl = rawUrl;
+    } else {
+      try {
+        const parsed = new URL(rawUrl, self.location.origin);
+        if (parsed.origin === self.location.origin) {
+          targetUrl = parsed.pathname + parsed.search + parsed.hash;
+        }
+      } catch (e) {}
+    }
+  }
 
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function (clientList) {

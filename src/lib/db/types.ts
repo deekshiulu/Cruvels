@@ -169,6 +169,30 @@ export interface Employee {
   updated_at: string;
 }
 
+export type CreateEmployeeInput = {
+  first_name: string;
+  last_name: string;
+  email: string;
+  department_id: string;
+  user_id?: string;
+  employee_code?: string;
+  name?: string;
+  phone?: string;
+  department_name?: string;
+  group_id?: string | null;
+  group_name?: string | null;
+  is_group_leader?: boolean;
+  designation?: string;
+  tagline?: string;
+  personal_email?: string;
+  joining_date?: string;
+  manager_id?: string | null;
+  manager_name?: string | null;
+  status?: 'ACTIVE' | 'INACTIVE';
+  leave_balances?: LeaveBalances;
+  created_by_id?: string | null;
+};
+
 export type AttendanceStatus = 'PRESENT' | 'WORK_FROM_HOME' | 'HALF_DAY' | 'ON_LEAVE' | 'ABSENT';
 
 export interface AttendanceRecord {
@@ -203,6 +227,7 @@ export interface LeaveRequest {
   reason: string;
   status: LeaveStatus;
   reviewed_by?: string | null;
+  reviewed_by_id?: string | null;
   reviewed_by_name?: string | null;
   reviewed_at?: string | null;
   rejection_reason?: string | null;

@@ -129,7 +129,7 @@ function ProfileContent() {
         setNewPassword('');
         setConfirmPassword('');
         if (forcePassword) {
-          window.location.href = '/dashboard';
+          window.location.href = user?.role === 'admin' ? '/admin' : '/dashboard';
           return;
         }
         setTimeout(() => setNotification(null), 4000);
