@@ -13,16 +13,19 @@ function getJwtSecret(): Uint8Array {
   return getJwtSecretBytes();
 }
 
-export function applySessionCookie(response: NextResponse, token: string): void {
-  response.cookies.set({
+export function applySessionCookie(response: NextResponse, token: string, rememberMe = false): void {
+  const cookieOptions: any = {
     name: AUTH_COOKIE_NAME,
     value: token,
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'lax',
     path: '/',
-    maxAge: SESSION_MAX_AGE_SEC,
-  });
+  };
+  if (rememberMe) {
+    cookieOptions.maxAge = 60 * 60 * 24 * 30; // 30 days
+  }
+  response.cookies.set(cookieOptions);
 }
 
 export function clearSessionCookie(response: NextResponse): void {

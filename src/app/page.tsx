@@ -2,6 +2,7 @@
 
 import React, { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { validateTabSession, clearTabSession } from '@/lib/auth/client-session';
 
 export default function RootPage() {
   const router = useRouter();
@@ -14,21 +15,45 @@ export default function RootPage() {
       if (mounted) router.replace('/login');
     }, 10000);
 
-    fetch('/api/auth/me')
-      .then((res) => {
-        if (!mounted) return;
+    const checkAuth = async () => {
+      const isTabActive = await validateTabSession();
+      if (!mounted) return;
+
+      if (!isTabActive) {
         clearTimeout(timer);
-        if (res.ok) {
-          router.replace('/dashboard');
-        } else if (res.status === 401) {
-          router.replace('/login');
-        }
-      })
-      .catch(() => {
-        if (!mounted) return;
-        clearTimeout(timer);
-        // Do not immediately bounce on transient network hiccup
-      });
+        clearTabSession();
+        await fetch('/api/auth/logout', { method: 'POST' }).catch(() => {});
+        if (mounted) router.replace('/login');
+        return;
+      }
+
+      fetch('/api/auth/me')
+        .then((res) => {
+          if (!mounted) return;
+          clearTimeout(timer);
+          if (res.ok) {
+            return res.json().then((data) => {
+              if (!mounted) return;
+              if (data.user?.mustChangePassword) {
+                router.replace('/profile?force=password');
+              } else if (data.user?.role === 'admin') {
+                router.replace('/admin');
+              } else {
+                router.replace('/dashboard');
+              }
+            });
+          } else if (res.status === 401) {
+            clearTabSession();
+            router.replace('/login');
+          }
+        })
+        .catch(() => {
+          if (!mounted) return;
+          clearTimeout(timer);
+        });
+    };
+
+    checkAuth();
 
     return () => {
       mounted = false;

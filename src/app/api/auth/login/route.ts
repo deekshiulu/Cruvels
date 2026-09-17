@@ -10,6 +10,7 @@ const LoginSchema = z.object({
   username: z.string().optional(),
   email: z.string().optional(),
   password: z.string().min(1, 'Password is required').max(100),
+  rememberMe: z.boolean().optional().default(false),
 }).refine((data) => Boolean(data.usernameOrEmail || data.username || data.email), {
   message: 'Username or email is required',
 });
@@ -144,7 +145,7 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    applySessionCookie(response, sessionToken);
+    applySessionCookie(response, sessionToken, Boolean(parseRes.data.rememberMe));
 
     return response;
   } catch (err: any) {

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   ShieldCheck,
@@ -14,13 +14,39 @@ import {
   Building2,
 } from 'lucide-react';
 
+import { markTabSessionActive, validateTabSession } from '@/lib/auth/client-session';
+
 export default function LoginPage() {
   const router = useRouter();
   const [usernameOrEmail, setUsernameOrEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [rememberMe, setRememberMe] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    let mounted = true;
+    validateTabSession().then((isActive) => {
+      if (!mounted || !isActive) return;
+      fetch('/api/auth/me')
+        .then((r) => (r.ok ? r.json() : null))
+        .then((data) => {
+          if (!mounted || !data?.user) return;
+          if (data.user.mustChangePassword) {
+            window.location.href = '/profile?force=password';
+          } else if (data.user.role === 'admin') {
+            window.location.href = '/admin';
+          } else {
+            window.location.href = '/dashboard';
+          }
+        })
+        .catch(() => {});
+    });
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -40,6 +66,7 @@ export default function LoginPage() {
         body: JSON.stringify({
           usernameOrEmail: cleanIdent,
           password,
+          rememberMe,
         }),
       });
 
@@ -50,6 +77,8 @@ export default function LoginPage() {
         setLoading(false);
         return;
       }
+
+      markTabSessionActive(rememberMe);
 
       if (data.user?.mustChangePassword) {
         window.location.href = '/profile?force=password';
@@ -147,6 +176,18 @@ export default function LoginPage() {
                   {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
               </div>
+            </div>
+
+            <div className="flex items-center justify-between pt-0.5">
+              <label className="flex items-center gap-2 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={rememberMe}
+                  onChange={(e) => setRememberMe(e.target.checked)}
+                  className="h-3.5 w-3.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500/20 cursor-pointer"
+                />
+                <span className="text-[11px] text-slate-600 font-medium">Remember me on this device</span>
+              </label>
             </div>
 
             <button

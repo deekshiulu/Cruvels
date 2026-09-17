@@ -35,6 +35,7 @@ import {
 import { AuthSessionUser, AppNotification } from '@/lib/db/types';
 import { playNotificationSound, unlockAudioContext } from '@/lib/utils/sound';
 import { clientCache } from '@/lib/cache/clientCache';
+import { validateTabSession, clearTabSession, TAB_CHANNEL_NAME, TAB_SESSION_KEY } from '@/lib/auth/client-session';
 
 function urlBase64ToUint8Array(base64String: string) {
   const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
@@ -179,7 +180,36 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   };
 
   useEffect(() => {
-    fetchSessionAndUnread();
+    let mounted = true;
+    let tabChannel: BroadcastChannel | null = null;
+
+    if (typeof window !== 'undefined' && typeof BroadcastChannel !== 'undefined') {
+      try {
+        tabChannel = new BroadcastChannel(TAB_CHANNEL_NAME);
+        tabChannel.onmessage = (ev) => {
+          if (ev.data?.type === 'PING_TAB_SESSION') {
+            if (sessionStorage.getItem(TAB_SESSION_KEY) === 'active') {
+              tabChannel?.postMessage({ type: 'PONG_TAB_SESSION' });
+            }
+          } else if (ev.data?.type === 'TAB_LOGOUT') {
+            clearTabSession();
+            router.replace('/login');
+          }
+        };
+      } catch {}
+    }
+
+    validateTabSession().then((isTabValid) => {
+      if (!mounted) return;
+      if (!isTabValid) {
+        clearTabSession();
+        fetch('/api/auth/logout', { method: 'POST' }).finally(() => {
+          if (mounted) router.replace('/login');
+        });
+        return;
+      }
+      fetchSessionAndUnread();
+    });
 
     // Check browser notification permission status
     if (typeof window !== 'undefined' && 'Notification' in window) {
@@ -217,11 +247,24 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           if (!incoming.is_read) {
             setNotifUnreadCount((c) => c + 1);
             playNotificationSound();
+
             if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
-              new Notification(incoming.title, {
-                body: incoming.message,
-                icon: '/favicon.ico',
-              });
+              try {
+                if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+                  navigator.serviceWorker.controller.postMessage({
+                    type: 'SHOW_NOTIFICATION',
+                    title: incoming.title,
+                    message: incoming.message,
+                    url: incoming.link_url || '/dashboard',
+                  });
+                } else {
+                  new Notification(incoming.title, {
+                    body: incoming.message,
+                    icon: '/favicon.ico',
+                    badge: '/favicon.ico',
+                  });
+                }
+              } catch {}
             }
           }
           if (incoming.type === 'mail') {
@@ -255,6 +298,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     window.addEventListener('mail-read', handleMailRead);
 
     return () => {
+      mounted = false;
+      tabChannel?.close();
       eventSource?.close();
       if (fallbackTimer) clearInterval(fallbackTimer);
       window.removeEventListener('mail-read', handleMailRead);
@@ -368,6 +413,14 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   }, []);
 
   const handleLogout = async () => {
+    clearTabSession();
+    if (typeof window !== 'undefined' && typeof BroadcastChannel !== 'undefined') {
+      try {
+        const ch = new BroadcastChannel(TAB_CHANNEL_NAME);
+        ch.postMessage({ type: 'TAB_LOGOUT' });
+        ch.close();
+      } catch {}
+    }
     try {
       await fetch('/api/auth/logout', { method: 'POST' });
     } finally {
