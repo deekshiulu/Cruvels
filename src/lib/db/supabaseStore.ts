@@ -924,6 +924,26 @@ export class SupabaseDataStore {
     return count || 0;
   }
 
+  public async getMessagesByThreadId(ownerUserId: string, threadId: string): Promise<Message[]> {
+    const { data, error } = await db()
+      .from('messages')
+      .select('*')
+      .eq('owner_user_id', ownerUserId)
+      .eq('thread_id', threadId)
+      .neq('folder', 'trash')
+      .order('created_at', { ascending: true });
+    if (error) err(error, 'Failed to load thread messages');
+    return (data || []).map(mapMessage);
+  }
+
+  public async markMessageAsSpam(userId: string, messageId: string): Promise<Message | null> {
+    return this.updateMessage(messageId, { folder: 'spam', is_spam: true });
+  }
+
+  public async unmarkMessageSpam(userId: string, messageId: string): Promise<Message | null> {
+    return this.updateMessage(messageId, { folder: 'inbox', is_spam: false });
+  }
+
   public async getAttachmentById(id: string): Promise<Attachment | null> {
     const { data, error } = await db().from('attachments').select('*').eq('id', id).maybeSingle();
     if (error) err(error, 'Failed to load attachment');

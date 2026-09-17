@@ -15,6 +15,8 @@ import {
   Trash2,
   Reply,
   ShieldCheck,
+  ShieldAlert,
+  MessageSquare,
 } from 'lucide-react';
 import { Message } from '@/lib/db/types';
 import { clientCache } from '@/lib/cache/clientCache';
@@ -129,6 +131,30 @@ function InboxContent() {
     }
   };
 
+  const handleMarkSpam = async (e: React.MouseEvent, msgId: string) => {
+    e.stopPropagation();
+    setMessages((prev) => prev.filter((m) => m.id !== msgId));
+    clientCache.invalidate('inbox');
+    try {
+      await fetch('/api/mail/spam', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messageId: msgId, action: 'mark' }),
+      });
+      fetchInbox();
+    } catch {}
+  };
+
+  const threadCountMap = React.useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const m of messages) {
+      if (m.thread_id) {
+        counts[m.thread_id] = (counts[m.thread_id] || 0) + 1;
+      }
+    }
+    return counts;
+  }, [messages]);
+
   const formatDate = (isoString?: string | null) => {
     if (!isoString) return '';
     const d = new Date(isoString);
@@ -210,7 +236,17 @@ function InboxContent() {
             }`}
           >
             <Filter className="h-3.5 w-3.5" />
-            <span>Unread Filter</span>
+            <span>Unread</span>
+          </button>
+
+          {/* Spam Quarantine Navigation Link */}
+          <button
+            onClick={() => router.push('/mail/spam')}
+            className="flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold border border-slate-200 bg-white text-slate-600 hover:text-amber-700 hover:bg-amber-50/50 hover:border-amber-200 transition-all shadow-sm"
+            title="View quarantined spam emails"
+          >
+            <ShieldAlert className="h-3.5 w-3.5 text-amber-600" />
+            <span>Spam</span>
           </button>
 
           {/* Pagination Controls */}
@@ -334,6 +370,12 @@ function InboxContent() {
                   >
                     {msg.subject || '(No Subject)'}
                   </span>
+                  {threadCountMap[msg.thread_id] > 1 && (
+                    <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded-md bg-blue-50 text-blue-700 text-[10px] font-bold border border-blue-200 shrink-0">
+                      <MessageSquare className="h-2.5 w-2.5" />
+                      {threadCountMap[msg.thread_id]}
+                    </span>
+                  )}
                   <span className="text-xs text-slate-500 truncate font-normal hidden sm:inline">
                     — {msg.snippet || 'No preview available'}
                   </span>
@@ -350,15 +392,25 @@ function InboxContent() {
                   <span className="text-right whitespace-nowrap font-medium text-[11px] text-slate-500">
                     {formatDate(msg.received_at || msg.created_at)}
                   </span>
-                  {/* Inline Trash Button */}
-                  <button
-                    type="button"
-                    onClick={(e) => handleDeleteMessage(e, msg.id)}
-                    className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-rose-600 p-1 rounded transition-opacity"
-                    title="Move to Trash"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </button>
+                  {/* Inline Spam and Trash Buttons */}
+                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button
+                      type="button"
+                      onClick={(e) => handleMarkSpam(e, msg.id)}
+                      className="text-slate-400 hover:text-amber-600 p-1 rounded"
+                      title="Move to Spam Quarantine"
+                    >
+                      <ShieldAlert className="h-3.5 w-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => handleDeleteMessage(e, msg.id)}
+                      className="text-slate-400 hover:text-rose-600 p-1 rounded"
+                      title="Move to Trash"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
                 </div>
               </div>
             ))}

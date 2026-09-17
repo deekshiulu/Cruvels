@@ -39,10 +39,13 @@ export interface Message {
   snippet: string;
   received_at: string | null;
   sent_at: string | null;
-  folder: 'inbox' | 'sent' | 'trash' | 'drafts';
+  folder: 'inbox' | 'sent' | 'trash' | 'drafts' | 'spam';
   is_read: boolean;
   is_starred: boolean;
   has_attachments: boolean;
+  is_spam?: boolean;
+  spam_score?: number;
+  spam_reason?: string;
   provider_metadata?: Record<string, any>;
   created_at?: string;
   updated_at?: string;
@@ -256,6 +259,7 @@ export interface ScheduleEvent {
   title: string;
   description: string;
   event_type: EventType;
+  holiday_type?: 'national' | 'company' | 'optional';
   start_time: string; // ISO
   end_time: string; // ISO
   location?: string;
@@ -263,6 +267,32 @@ export interface ScheduleEvent {
   created_by: string;
   created_at: string;
 }
+
+export interface PublicHolidayDefinition {
+  name: string;
+  date: string; // YYYY-MM-DD
+  type: 'national' | 'company' | 'optional';
+  description: string;
+}
+
+export const INDIAN_HOLIDAYS_2026: PublicHolidayDefinition[] = [
+  { name: 'New Year Day', date: '2026-01-01', type: 'national', description: 'New Year celebration' },
+  { name: 'Republic Day', date: '2026-01-26', type: 'national', description: 'National Republic Day holiday' },
+  { name: 'Maha Shivaratri', date: '2026-02-15', type: 'optional', description: 'Maha Shivaratri festival' },
+  { name: 'Holi', date: '2026-03-04', type: 'national', description: 'Festival of colors' },
+  { name: 'Good Friday', date: '2026-04-03', type: 'national', description: 'Good Friday Christian observance' },
+  { name: 'Eid ul-Fitr', date: '2026-03-21', type: 'national', description: 'Eid festival celebration' },
+  { name: 'Labor Day / May Day', date: '2026-05-01', type: 'company', description: 'International Workers Day' },
+  { name: 'Independence Day', date: '2026-08-15', type: 'national', description: 'Indian Independence Day national holiday' },
+  { name: 'Raksha Bandhan', date: '2026-08-28', type: 'optional', description: 'Festival of sibling bonds' },
+  { name: 'Janmashtami', date: '2026-09-04', type: 'optional', description: 'Krishna Janmashtami' },
+  { name: 'Ganesh Chaturthi', date: '2026-09-14', type: 'company', description: 'Vinayaka Chaturthi festival' },
+  { name: 'Gandhi Jayanti', date: '2026-10-02', type: 'national', description: 'Mahatma Gandhi birth anniversary' },
+  { name: 'Dussehra (Vijayadashami)', date: '2026-10-20', type: 'national', description: 'Triumph of good over evil' },
+  { name: 'Diwali (Deepavali)', date: '2026-11-08', type: 'national', description: 'Festival of lights national holiday' },
+  { name: 'Guru Nanak Jayanti', date: '2026-11-24', type: 'national', description: 'Guru Nanak birth anniversary' },
+  { name: 'Christmas', date: '2026-12-25', type: 'national', description: 'Christmas Day celebration' },
+];
 
 export interface Note {
   id: string;

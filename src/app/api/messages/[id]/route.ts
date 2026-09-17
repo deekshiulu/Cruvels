@@ -31,7 +31,7 @@ export async function GET(
       syncMailboxFlags(message, 'read');
     }
 
-    // Fetch authorized attachments list
+    // Fetch authorized attachments list for primary message
     const attachments = await dataStore.getAttachmentsByMessageId(message.id);
     const safeAttachments = attachments.map((a) => ({
       id: a.id,
@@ -41,12 +41,30 @@ export async function GET(
       download_url: `/api/messages/${message.id}/attachments/${a.id}`,
     }));
 
+    // Fetch complete conversation thread (all chronological messages in this thread owned by user)
+    const threadMessages = await dataStore.getMessagesByThreadId(user.id, message.thread_id);
+    const threadAttachmentsMap: Record<string, { id: string; filename: string; mime_type: string; size: number; download_url: string }[]> = {};
+    for (const tm of threadMessages) {
+      if (tm.id === message.id) {
+        threadAttachmentsMap[tm.id] = safeAttachments;
+      } else {
+        const tmAtts = await dataStore.getAttachmentsByMessageId(tm.id);
+        threadAttachmentsMap[tm.id] = tmAtts.map((a) => ({
+          id: a.id,
+          filename: a.filename,
+          mime_type: a.mime_type,
+          size: a.size,
+          download_url: `/api/messages/${tm.id}/attachments/${a.id}`,
+        }));
+      }
+    }
+
     await logAuditEvent({
       userId: user.id,
       action: 'READ_MESSAGE',
       resourceType: 'MESSAGE',
       resourceId: message.id,
-      metadata: { subject: message.subject, folder: message.folder },
+      metadata: { subject: message.subject, folder: message.folder, threadId: message.thread_id },
       req,
     });
 
@@ -54,6 +72,8 @@ export async function GET(
       success: true,
       message,
       attachments: safeAttachments,
+      threadMessages: threadMessages.length > 0 ? threadMessages : [message],
+      threadAttachmentsMap,
     });
   } catch (err) {
     return handleApiError(err);
@@ -76,7 +96,13 @@ export async function PATCH(
 
     if (typeof body.is_read === 'boolean') updates.is_read = body.is_read;
     if (typeof body.is_starred === 'boolean') updates.is_starred = body.is_starred;
-    if (['inbox', 'sent', 'trash', 'archive', 'drafts'].includes(body.folder)) {
+    if (body.action === 'spam' || body.folder === 'spam') {
+      updates.folder = 'spam';
+      updates.is_spam = true;
+    } else if (body.action === 'unspam') {
+      updates.folder = 'inbox';
+      updates.is_spam = false;
+    } else if (['inbox', 'sent', 'trash', 'archive', 'drafts', 'spam'].includes(body.folder)) {
       updates.folder = body.folder;
     }
 

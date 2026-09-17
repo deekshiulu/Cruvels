@@ -1679,6 +1679,38 @@ export class UnifiedDataStore {
     return msg ? { ...msg } : null;
   }
 
+  public async getMessagesByThreadId(ownerUserId: string, threadId: string): Promise<Message[]> {
+    const threadMsgs = this.messages.filter(
+      (m) => m.owner_user_id === ownerUserId && m.thread_id === threadId && m.folder !== 'trash'
+    );
+    threadMsgs.sort((a, b) => {
+      const dateA = new Date(a.received_at || a.sent_at || a.created_at || 0).getTime();
+      const dateB = new Date(b.received_at || b.sent_at || b.created_at || 0).getTime();
+      return dateA - dateB;
+    });
+    return threadMsgs.map((m) => ({ ...m }));
+  }
+
+  public async markMessageAsSpam(userId: string, messageId: string): Promise<Message | null> {
+    const msg = this.messages.find((m) => m.id === messageId && m.owner_user_id === userId);
+    if (!msg) return null;
+    msg.folder = 'spam';
+    msg.is_spam = true;
+    msg.updated_at = new Date().toISOString();
+    this.persistToDisk();
+    return { ...msg };
+  }
+
+  public async unmarkMessageSpam(userId: string, messageId: string): Promise<Message | null> {
+    const msg = this.messages.find((m) => m.id === messageId && m.owner_user_id === userId);
+    if (!msg) return null;
+    msg.folder = 'inbox';
+    msg.is_spam = false;
+    msg.updated_at = new Date().toISOString();
+    this.persistToDisk();
+    return { ...msg };
+  }
+
   public async getMessagesByOwner(
     ownerUserId: string,
     options: {

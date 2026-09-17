@@ -49,15 +49,37 @@ export async function POST(req: NextRequest) {
     const originalMessage = await assertMessageOwnership(user, replyToMessageId);
 
     // Determine reply recipient
-    const recipientTo = [originalMessage.from_address];
-    let recipientCc: string[] = [];
+    const userAliasLower = user.assignedAliases.map((a) => a.toLowerCase());
+    const isSentByMe = userAliasLower.includes(originalMessage.from_address.toLowerCase());
 
-    if (replyAll) {
-      // Include original To and CC, minus user's own address
-      const otherRecipients = [...originalMessage.to_addresses, ...(originalMessage.cc_addresses || [])].filter(
-        (addr) => !user.assignedAliases.map((a) => a.toLowerCase()).includes(addr.toLowerCase())
+    let recipientTo: string[] = [];
+    if (isSentByMe) {
+      recipientTo = originalMessage.to_addresses.filter(
+        (addr) => !userAliasLower.includes(addr.toLowerCase())
       );
-      recipientCc = Array.from(new Set(otherRecipients));
+      if (recipientTo.length === 0) {
+        recipientTo = [originalMessage.to_addresses[0] || originalMessage.from_address];
+      }
+    } else {
+      recipientTo = [originalMessage.from_address];
+    }
+
+    let recipientCc: string[] = [];
+    if (replyAll) {
+      const allParticipants = [
+        originalMessage.from_address,
+        ...originalMessage.to_addresses,
+        ...(originalMessage.cc_addresses || []),
+      ];
+      recipientCc = Array.from(
+        new Set(
+          allParticipants.filter(
+            (addr) =>
+              !userAliasLower.includes(addr.toLowerCase()) &&
+              !recipientTo.map((r) => r.toLowerCase()).includes(addr.toLowerCase())
+          )
+        )
+      );
     }
 
     const replySubject = originalMessage.subject.startsWith('Re:')

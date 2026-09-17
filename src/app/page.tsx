@@ -9,10 +9,10 @@ export default function RootPage() {
   useEffect(() => {
     let mounted = true;
 
-    // Timeout safety fallback: never let user get stuck on loading screen
+    // Timeout safety fallback: never let user get stuck on loading screen (generous 10s for dev cold compile)
     const timer = setTimeout(() => {
       if (mounted) router.replace('/login');
-    }, 2500);
+    }, 10000);
 
     fetch('/api/auth/me')
       .then((res) => {
@@ -20,14 +20,14 @@ export default function RootPage() {
         clearTimeout(timer);
         if (res.ok) {
           router.replace('/dashboard');
-        } else {
+        } else if (res.status === 401) {
           router.replace('/login');
         }
       })
       .catch(() => {
         if (!mounted) return;
         clearTimeout(timer);
-        router.replace('/login');
+        // Do not immediately bounce on transient network hiccup
       });
 
     return () => {

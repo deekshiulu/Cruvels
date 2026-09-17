@@ -30,6 +30,7 @@ import {
   Check,
   Volume2,
   FileText,
+  ShieldAlert,
 } from 'lucide-react';
 import { AuthSessionUser, AppNotification } from '@/lib/db/types';
 import { playNotificationSound, unlockAudioContext } from '@/lib/utils/sound';
@@ -74,7 +75,11 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     try {
       const res = await fetch('/api/notifications?limit=25');
       if (res.status === 401) {
-        router.replace('/login');
+        // Double check session before redirecting
+        const sessionCheck = await fetch('/api/auth/me').catch(() => null);
+        if (sessionCheck && sessionCheck.status === 401) {
+          router.replace('/login');
+        }
         return;
       }
       if (res.ok) {
@@ -90,10 +95,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           // Detect newly arrived notifications
           const newItems = incoming.filter((n) => !knownNotifIdsRef.current.has(n.id) && !n.is_read);
           if (newItems.length > 0) {
-            // Play audio alert chime
             playNotificationSound();
 
-            // Show native OS / device notification if permitted
             if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
               const latest = newItems[0];
               try {
@@ -124,14 +127,13 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   const fetchSessionAndUnread = async () => {
     try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 4000);
-
-      const res = await fetch('/api/auth/me', { signal: controller.signal });
-      clearTimeout(timeoutId);
-
-      if (!res.ok) {
+      const res = await fetch('/api/auth/me');
+      if (res.status === 401) {
         router.replace('/login');
+        return;
+      }
+      if (!res.ok) {
+        // Server compilation or transient error — preserve session
         return;
       }
       const data = await res.json();
@@ -140,15 +142,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         clientCache.setUserScope(data.user.id);
       }
 
-      // Fetch unread emails and notifications in background
+      // Fetch unread emails and notifications in background (non-blocking, non-fatal)
       fetch('/api/mail/inbox?limit=1')
-        .then((r) => {
-          if (r.status === 401) {
-            router.replace('/login');
-            return null;
-          }
-          return r.ok ? r.json() : null;
-        })
+        .then((r) => (r.ok ? r.json() : null))
         .then((inboxData) => {
           if (inboxData?.unreadCount !== undefined) {
             setUnreadCount(inboxData.unreadCount);
@@ -157,8 +153,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         .catch(() => {});
 
       fetchNotifications();
-    } catch {
-      router.replace('/login');
+    } catch (err: any) {
+      if (err?.name === 'AbortError') return;
+      // Network hiccup — keep current user in UI, do not kick to login
     } finally {
       setLoading(false);
     }
@@ -166,14 +163,14 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (user?.mustChangePassword && pathname !== '/profile') {
-      window.location.href = '/profile?force=password';
+      router.replace('/profile?force=password');
     }
-  }, [user, pathname]);
+  }, [user, pathname, router]);
 
   const navigateTo = (path: string) => {
     if (user?.mustChangePassword) {
       if (pathname !== '/profile') {
-        window.location.href = '/profile?force=password';
+        router.replace('/profile?force=password');
       }
       return;
     }
@@ -198,13 +195,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       fallbackTimer = setInterval(() => {
         fetchNotifications();
         fetch('/api/mail/inbox?limit=1')
-          .then((r) => {
-            if (r.status === 401) {
-              router.replace('/login');
-              return null;
-            }
-            return r.ok ? r.json() : null;
-          })
+          .then((r) => (r.ok ? r.json() : null))
           .then((inboxData) => {
             if (inboxData?.unreadCount !== undefined) {
               setUnreadCount(inboxData.unreadCount);
@@ -799,6 +790,21 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               >
                 <FileText className="h-3.5 w-3.5 text-purple-600" />
                 <span className="hidden sm:inline">Drafts</span>
+              </button>
+
+              <button
+                onClick={() => navigateTo('/mail/spam')}
+                className={`flex items-center gap-1.5 rounded-xl px-2.5 sm:px-3 py-1.5 transition-all ${
+                  isMailActive('/mail/spam')
+                    ? 'bg-white text-amber-700 shadow-sm border border-slate-200/60'
+                    : user.mustChangePassword
+                    ? 'text-slate-400 cursor-not-allowed'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+                title="Spam Quarantine"
+              >
+                <ShieldAlert className="h-3.5 w-3.5 text-amber-600" />
+                <span className="hidden sm:inline">Spam</span>
               </button>
 
               <button
