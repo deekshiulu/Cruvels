@@ -679,6 +679,10 @@ export class UnifiedDataStore {
   }
 
   public persistToDisk() {
+    if (process.env.NODE_ENV === 'test' || process.env.VITEST) {
+      return;
+    }
+
     const data = {
       users: Array.from(this.users.values()),
       aliases: Array.from(this.aliases.values()),
@@ -730,7 +734,7 @@ export class UnifiedDataStore {
               for (const u of data.users) {
                 this.users.set(u.id, {
                   ...u,
-                  must_change_password: u.must_change_password !== false,
+                  must_change_password: Boolean(u.must_change_password),
                 });
               }
             }
@@ -933,7 +937,7 @@ export class UnifiedDataStore {
   }
 
   public async createDepartment(data: { name: string; code: string; head_name: string; head_id?: string; description?: string }): Promise<Department> {
-    const id = `dep-${Date.now().toString(36)}`;
+    const id = `dep-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 7)}`;
     const now = new Date().toISOString();
     const newDept: Department = {
       id,
@@ -1024,7 +1028,7 @@ export class UnifiedDataStore {
     const leader = await this.getEmployeeById(data.leader_id);
     if (!leader) throw new Error('Designated Group Leader employee not found.');
 
-    const id = `grp-${Date.now().toString(36)}`;
+    const id = `grp-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 7)}`;
     const now = new Date().toISOString();
     const members = Array.from(new Set([data.leader_id, ...(data.member_ids || [])]));
 
@@ -1162,7 +1166,7 @@ export class UnifiedDataStore {
   }
 
   public async createEmployee(data: CreateEmployeeInput): Promise<Employee> {
-    const id = `emp-${Date.now().toString(36)}`;
+    const id = `emp-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 7)}`;
     const now = new Date().toISOString();
     const firstName = data.first_name || '';
     const lastName = data.last_name || '';
