@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { dataStore } from '../../src/lib/db/store';
-import { hashPassword } from '../../src/lib/auth/session';
-import { AuthSessionUser, INDIAN_HOLIDAYS_2026 } from '../../src/lib/db/types';
+import { dataStore } from '@/lib/db/store';
+import { hashPassword } from '@/lib/auth/session';
+import { AuthSessionUser, INDIAN_HOLIDAYS_2026 } from '@/lib/db/types';
 
 describe('Stage 4: Attendance Calendar & Mail Gateway Enhancements', () => {
   let user1: AuthSessionUser;
