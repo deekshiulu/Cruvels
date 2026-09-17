@@ -73,6 +73,10 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const fetchNotifications = async () => {
     try {
       const res = await fetch('/api/notifications?limit=25');
+      if (res.status === 401) {
+        router.replace('/login');
+        return;
+      }
       if (res.ok) {
         const data = await res.json();
         const incoming: AppNotification[] = data.notifications || [];
@@ -138,7 +142,13 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
       // Fetch unread emails and notifications in background
       fetch('/api/mail/inbox?limit=1')
-        .then((r) => (r.ok ? r.json() : null))
+        .then((r) => {
+          if (r.status === 401) {
+            router.replace('/login');
+            return null;
+          }
+          return r.ok ? r.json() : null;
+        })
         .then((inboxData) => {
           if (inboxData?.unreadCount !== undefined) {
             setUnreadCount(inboxData.unreadCount);
@@ -188,7 +198,13 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       fallbackTimer = setInterval(() => {
         fetchNotifications();
         fetch('/api/mail/inbox?limit=1')
-          .then((r) => (r.ok ? r.json() : null))
+          .then((r) => {
+            if (r.status === 401) {
+              router.replace('/login');
+              return null;
+            }
+            return r.ok ? r.json() : null;
+          })
           .then((inboxData) => {
             if (inboxData?.unreadCount !== undefined) {
               setUnreadCount(inboxData.unreadCount);

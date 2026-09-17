@@ -206,10 +206,22 @@ export function handleApiError(err: unknown) {
     if (err.statusCode >= 500) {
       console.error('[API AUTH ERROR]', err);
     }
-    return NextResponse.json(
+    const res = NextResponse.json(
       { error: err.message, success: false },
       { status: err.statusCode }
     );
+    if (err.statusCode === 401) {
+      res.cookies.set({
+        name: AUTH_COOKIE_NAME,
+        value: '',
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        path: '/',
+        maxAge: 0,
+      });
+    }
+    return res;
   }
 
   console.error('[API ERROR]', err);
