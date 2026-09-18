@@ -356,6 +356,7 @@ export interface AppNotification {
   id: string;
   user_id: string;
   type: NotificationType;
+  category?: string;
   title: string;
   message: string;
   link_url?: string;

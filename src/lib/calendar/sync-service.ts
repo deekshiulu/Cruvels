@@ -120,7 +120,10 @@ export async function syncCalendarIntegration(
  * Pre-populates realistic Google Calendar and Microsoft Teams sample meetings
  * into the user's schedule for immediate testing and demonstration.
  */
-export async function syncSampleCalendars(userId: string): Promise<{ added: number; updated: number }> {
+export async function syncSampleCalendars(
+  userId: string,
+  userEmail?: string
+): Promise<{ success: boolean; eventsSynced: number; added: number; updated: number }> {
   const now = new Date();
   const year = now.getFullYear();
   const month = now.getMonth(); // 0-indexed

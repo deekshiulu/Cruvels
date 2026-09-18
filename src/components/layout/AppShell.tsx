@@ -31,6 +31,7 @@ import {
   Volume2,
   FileText,
   ShieldAlert,
+  Trash2,
 } from 'lucide-react';
 import { AuthSessionUser, AppNotification } from '@/lib/db/types';
 import { playNotificationSound, unlockAudioContext } from '@/lib/utils/sound';
@@ -858,6 +859,21 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               >
                 <ShieldAlert className="h-3.5 w-3.5 text-amber-600" />
                 <span className="hidden sm:inline">Spam</span>
+              </button>
+
+              <button
+                onClick={() => navigateTo('/mail/trash')}
+                className={`flex items-center gap-1.5 rounded-xl px-2.5 sm:px-3 py-1.5 transition-all ${
+                  isMailActive('/mail/trash')
+                    ? 'bg-white text-rose-700 shadow-sm border border-slate-200/60'
+                    : user.mustChangePassword
+                    ? 'text-slate-400 cursor-not-allowed'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+                title="Trash Mailbox"
+              >
+                <Trash2 className="h-3.5 w-3.5 text-rose-600" />
+                <span className="hidden sm:inline">Trash</span>
               </button>
 
               <button
