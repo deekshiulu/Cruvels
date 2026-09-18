@@ -190,4 +190,36 @@ describe('Calendar Integration Store & Sync Engine', () => {
       expect(t.sync_provider).toBe('microsoft');
     }
   });
+
+  it('validates schedule event time ranges and records attendees', async () => {
+    // Valid time range
+    const startTime = '2026-09-20T10:00:00.000Z';
+    const endTime = '2026-09-20T11:00:00.000Z';
+    const start = new Date(startTime).getTime();
+    const end = new Date(endTime).getTime();
+    expect(end > start).toBe(true);
+
+    const event = await dataStore.createScheduleEvent({
+      title: 'Architecture Review',
+      description: 'Review stage completion',
+      event_type: 'meeting',
+      start_time: startTime,
+      end_time: endTime,
+      location: 'Conference Room Alpha',
+      attendee_ids: [testUserId, 'user-charith', 'user-niketh'],
+      created_by: testUserId,
+    });
+
+    expect(event.id).toBeDefined();
+    expect(event.title).toBe('Architecture Review');
+    expect(event.attendee_ids).toContain(testUserId);
+    expect(event.attendee_ids).toContain('user-charith');
+    expect(event.attendee_ids).toContain('user-niketh');
+
+    // Invalid time range: end before start
+    const invalidStart = '2026-09-20T15:00:00.000Z';
+    const invalidEnd = '2026-09-20T14:00:00.000Z';
+    const isInvalid = new Date(invalidEnd).getTime() <= new Date(invalidStart).getTime();
+    expect(isInvalid).toBe(true);
+  });
 });

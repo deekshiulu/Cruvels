@@ -10,6 +10,7 @@ const CreateEventSchema = z.object({
   startTime: z.string().min(10),
   endTime: z.string().min(10),
   location: z.string().optional(),
+  attendeeIds: z.array(z.string()).optional(),
 });
 
 export async function GET(req: NextRequest) {
@@ -31,7 +32,19 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Invalid event data.', success: false }, { status: 400 });
     }
 
-    const { title, description, eventType, startTime, endTime, location } = parseRes.data;
+    const { title, description, eventType, startTime, endTime, location, attendeeIds } = parseRes.data;
+
+    const start = new Date(startTime).getTime();
+    const end = new Date(endTime).getTime();
+    if (isNaN(start) || isNaN(end) || end <= start) {
+      return NextResponse.json(
+        { error: 'Invalid time range: End time must be strictly after start time.', success: false },
+        { status: 400 }
+      );
+    }
+
+    const attendees = Array.from(new Set([user.id, ...(attendeeIds || [])]));
+
     const event = await dataStore.createScheduleEvent({
       title,
       description,
@@ -39,7 +52,7 @@ export async function POST(req: NextRequest) {
       start_time: startTime,
       end_time: endTime,
       location: location || 'Cruvels Office',
-      attendee_ids: [user.id],
+      attendee_ids: attendees,
       created_by: user.id,
     });
 
