@@ -2,130 +2,927 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ─── Google Fonts (Loaded asynchronously via layout.tsx with preconnect) ────── */
+
+/* ─── Light-mode tokens (default) ───────────────────────────────────────────
+   One source of truth. Every component reads these vars — not hard-coded hex.
+   ──────────────────────────────────────────────────────────────────────────── */
+:root {
+  --paper:        #F0F4F8;   /* Crisp executive light canvas with subtle cool navy undertone */
+  --surface:      #FFFFFF;   /* Pure crisp white for cards, panels, modals, search bars */
+  --surface-2:    #E8EFF6;   /* Ice navy tint — table headers, track rows, secondary zones */
+  --surface-hover:#E1EAF2;   /* Hover tint on interactive surfaces */
+  --ink:          #000000;   /* Pure black primary text in white/light theme */
+  --ink-2:        #111827;   /* Deep slate secondary text */
+  --muted:        #374151;   /* High-contrast WCAG AAA dark slate caption and secondary text on white */
+  --line:         #D0DCE8;   /* Crisp defined 1px borders on cards, inputs, buttons */
+  --line-soft:    #E2EBF4;   /* Quieter dividers — between header/body, list rows */
+  --teal:         #0A369D;   /* Primary Navy Accent — solid buttons, active pills, indicators */
+  --teal-ink:     #051B4E;   /* Deep contrast navy text on ice-blue washes */
+  --teal-wash:    #E0EDFB;   /* Pale ice-blue wash for active nav items, tags, selected chips */
+  --amber:        #D97706;   /* Secondary accent — Break state, pending/deadline tags */
+  --amber-wash:   #FEF3C7;   /* Pale background for amber tags */
+  --rose:         #E11D48;   /* Danger accent — Clock-out, overdue tags, unread badge */
+  --rose-wash:    #FFE4E6;   /* Pale background for rose tags */
+  --violet:       #4F46E5;   /* Tertiary accent — 1:1 calendar events, remote status */
+  --violet-wash:  #EEF2FF;   /* Pale background for violet tags */
+
+  /* 5. Card shadows — subtle luxurious ambient navy tint */
+  --shadow:       0 1px 2px rgba(10,25,47,.05), 0 8px 24px -12px rgba(10,25,47,.12);
+
+  /* Semantic aliases */
+  --teal-dim:         var(--teal-wash);
+  --amber-dim:        var(--amber-wash);
+  --rose-dim:         var(--rose-wash);
+  --violet-dim:       var(--violet-wash);
+  --bg-main:          var(--paper);
+  --bg-surface:       var(--surface);
+  --bg:               var(--paper);
+  --border-subtle:    var(--line);
+  --text-primary:     var(--ink);
+  --text-secondary:   var(--muted);
+}
+
+/* ─── Dark-mode tokens ───────────────────────────────────────────────────────
+   Full re-mapping, not a filter. Applied via .dark or [data-theme="dark"]
+   ──────────────────────────────────────────────────────────────────────────── */
+.dark,
+[data-theme="dark"] {
+  --paper:        #070E1A;   /* Deepest Abyssal Midnight Navy canvas */
+  --surface:      #0D192B;   /* Rich dark navy card, rail, and modal surface */
+  --surface-2:    #13233B;   /* Deep Navy Slate for tracks, secondary zones */
+  --ink:          #FFFFFF;   /* Pure crisp white primary text on dark theme */
+  --ink-2:        #F1F5F9;   /* Bright frost silver secondary text */
+  --muted:        #94A3B8;   /* Luminous readable silver on dark navy */
+  --line:         #1A2F4C;   /* Deep navy border lines */
+  --line-soft:    #14243B;   /* Soft midnight dividers */
+  --teal:         #3B82F6;   /* Vibrant Electric Blue accent for dark mode */
+  --teal-ink:     #FFFFFF;   /* Text on solid electric blue button in dark mode */
+  --teal-wash:    #122744;   /* Dark navy wash for active nav items & tags */
+  --amber:        #F59E0B;
+  --amber-wash:   #2D1F08;
+  --rose:         #F43F5E;
+  --rose-wash:    #300F17;
+  --violet:       #818CF8;
+  --violet-wash:  #1F1D3E;
+
+  /* Shadows switch base to midnight navy at higher opacity */
+  --shadow:       0 1px 2px rgba(0,0,0,.5), 0 10px 30px -10px rgba(2,6,15,.85);
+
+  /* Semantic aliases */
+  --teal-dim:         var(--teal-wash);
+  --amber-dim:        var(--amber-wash);
+  --rose-dim:         var(--rose-wash);
+  --violet-dim:       var(--violet-wash);
+  --bg-main:          var(--paper);
+  --bg-surface:       var(--surface);
+  --bg:               var(--paper);
+  --border-subtle:    var(--line);
+  --text-primary:     var(--ink);
+  --text-secondary:   var(--muted);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]):not(.light) {
+    --paper:        #070E1A;
+    --surface:      #0D192B;
+    --surface-2:    #13233B;
+    --surface-hover:#192E4D;
+    --ink:          #FFFFFF;
+    --ink-2:        #F1F5F9;
+    --muted:        #94A3B8;
+    --line:         #1A2F4C;
+    --line-soft:    #14243B;
+    --teal:         #3B82F6;
+    --teal-ink:     #FFFFFF;
+    --teal-wash:    #122744;
+    --amber:        #F59E0B;
+    --amber-wash:   #2D1F08;
+    --rose:         #F43F5E;
+    --rose-wash:    #300F17;
+    --violet:       #818CF8;
+    --violet-wash:  #1F1D3E;
+    --shadow:       0 1px 2px rgba(0,0,0,.5), 0 10px 30px -10px rgba(2,6,15,.85);
+
+    --teal-dim:         var(--teal-wash);
+    --amber-dim:        var(--amber-wash);
+    --rose-dim:         var(--rose-wash);
+    --violet-dim:       var(--violet-wash);
+    --bg-main:          var(--paper);
+    --bg-surface:       var(--surface);
+    --border-subtle:    var(--line);
+    --text-primary:     var(--ink);
+    --text-secondary:   var(--muted);
+  }
+}
+
+/* ─── Base layer ─────────────────────────────────────────────────────────────
+   Set typography and background from tokens
+   ──────────────────────────────────────────────────────────────────────────── */
 @layer base {
-  :root {
-    --bg-main: #F8FAFC;
-    --bg-surface: #FFFFFF;
-    --bg-card: #FFFFFF;
-    --bg-card-hover: #F1F5F9;
-    --border-subtle: #E2E8F0;
-    --border-highlight: rgba(37, 99, 235, 0.35);
-    --text-primary: #0F172A;
-    --text-secondary: #475569;
-    --text-muted: #64748B;
+  html {
+    background-color: var(--paper);
+    color: var(--ink);
+    -webkit-text-size-adjust: 100%;
   }
 
   body {
-    background-color: var(--bg-main);
-    color: var(--text-primary);
-    font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background-color: var(--paper);
+    color: var(--ink);
+    font-family: 'Archivo', system-ui, -apple-system, sans-serif;
+    font-size: 14px;
+    line-height: 1.6;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     overflow-x: hidden;
   }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Bricolage Grotesque', system-ui, sans-serif;
+    color: var(--ink);
+    line-height: 1.2;
+  }
+
+  /* Universal mobile touch responsiveness & zero tap delay */
+  *, *::before, *::after {
+    -webkit-tap-highlight-color: transparent;
+    -webkit-touch-callout: none;
+  }
+
+  button,
+  [role="button"],
+  input[type="button"],
+  input[type="submit"],
+  input[type="reset"],
+  a,
+  select,
+  label[for],
+  [tabindex] {
+    touch-action: manipulation;
+    cursor: pointer;
+  }
+
+  /* Prevent phantom click delays globally */
+  * {
+    touch-action: manipulation;
+  }
 }
 
-/* Custom Scrollbars */
-::-webkit-scrollbar {
-  width: 5px;
-  height: 5px;
-}
-::-webkit-scrollbar-track {
-  background: #F1F5F9;
-}
-::-webkit-scrollbar-thumb {
-  background: #CBD5E1;
-  border-radius: 9999px;
-}
-::-webkit-scrollbar-thumb:hover {
-  background: #94A3B8;
+/* ─── Mobile Button Responsiveness & Accessible Touch Targets ───────────────── */
+@media (max-width: 768px) {
+  /* All buttons & interactive elements meet 44px WCAG touch target */
+  button,
+  [role="button"],
+  .btn-primary,
+  .glow-btn-primary,
+  .btn-ghost,
+  .btn-secondary,
+  a,
+  select {
+    min-height: 44px;
+    touch-action: manipulation;
+  }
+
+  /* Clickable cards (div with onClick) */
+  [class*="cursor-pointer"] {
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* Active press feedback for all tappable elements */
+  button:active:not(:disabled),
+  [role="button"]:active,
+  .btn-primary:active:not(:disabled),
+  .glow-btn-primary:active:not(:disabled),
+  .btn-ghost:active:not(:disabled) {
+    transform: scale(0.97);
+    transition: transform 0.08s ease;
+  }
+
+  .btn-primary,
+  .glow-btn-primary,
+  .btn-ghost,
+  .btn-secondary {
+    max-width: 100%;
+  }
+
+  /* Select and input touch sizing */
+  select,
+  input[type="text"],
+  input[type="email"],
+  input[type="password"],
+  input[type="search"],
+  textarea {
+    font-size: 16px; /* prevent iOS auto-zoom on focus */
+  }
 }
 
-/* Clean Light UI Utilities */
-.glass-panel {
-  background: rgba(255, 255, 255, 0.92);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid #E2E8F0;
-  box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.05);
+/* ─── Scrollbars ─────────────────────────────────────────────────────────────*/
+::-webkit-scrollbar       { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--line); border-radius: 9999px; }
+::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+
+/* ─── Utility classes ────────────────────────────────────────────────────────*/
+
+/* Section label — sentence-case, ruled border below, no all-caps eyebrow */
+.section-label {
+  font-family: 'Archivo', sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 12px;
+  letter-spacing: 0.01em;
 }
 
-.glass-card {
-  background: #FFFFFF;
-  border: 1px solid #E2E8F0;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05), 0 1px 2px rgba(0, 0, 0, 0.03);
-  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+/* ─── Exact Opacity & Color-Mixing Rules ─────────────────────────────────────
+   Only 7 places in the whole UI use alpha / opacity. Everything else is a distinct hex.
+   ──────────────────────────────────────────────────────────────────────────── */
+
+/* 1. Topbar blur — 88% opacity (single glass moment in the UI) */
+.topbar {
+  background: color-mix(in srgb, var(--paper) 88%, transparent);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
 }
 
-.glass-card:hover {
-  background: #F8FAFC;
-  border-color: #93C5FD;
-  box-shadow: 0 8px 24px -4px rgba(0, 0, 0, 0.08);
+/* 2. Dialog backdrop — 50% opacity black-ish */
+dialog::backdrop {
+  background: rgba(10, 20, 25, 0.5);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
 }
 
+/* 3. Day-strip work segments — 90% opacity */
+.strip .seg {
+  background: var(--teal);
+  opacity: 0.9;
+}
+
+/* 4. Live-status pulse ring — 60% opacity fading to 0 */
+.dot.live {
+  box-shadow: 0 0 0 0 color-mix(in srgb, var(--teal) 60%, transparent);
+  animation: pulse 2.4s infinite;
+}
+@keyframes pulse {
+  70% {
+    box-shadow: 0 0 0 9px transparent;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .dot.live {
+    animation: none;
+  }
+}
+
+/* 5. Card shadows — 6% and 40% opacity, both on ink, not black */
+.card,
+.ruled-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow);
+  border-radius: 8px;
+}
+
+.card:hover,
+.ruled-card:hover {
+  background: var(--surface-hover);
+}
+
+/* 6. Toast shadow — 60% opacity */
+.toast {
+  box-shadow: 0 12px 30px -12px rgba(0, 0, 0, 0.6);
+}
+
+/* 7. Text selection — full-opacity wash, no alpha */
+::selection {
+  background: var(--teal-wash);
+  color: var(--ink);
+}
+::-moz-selection {
+  background: var(--teal-wash);
+  color: var(--ink);
+}
+
+/* ─── Tag & Wash Pairs ───────────────────────────────────────────────────────
+   Rule: -wash is the background at full opacity (distinct pale hex),
+   and base color is used as text on top of it.
+   ──────────────────────────────────────────────────────────────────────────── */
+.tag-teal   { background: var(--teal-wash);   color: var(--teal-ink); }
+.tag-amber  { background: var(--amber-wash);  color: var(--amber); }
+.tag-rose   { background: var(--rose-wash);   color: var(--rose); }
+.tag-violet { background: var(--violet-wash); color: var(--violet); }
+
+.badge-teal   { background: var(--teal-wash);   color: var(--teal-ink); border-radius: 4px; padding: 1px 8px; font-size: 11px; font-weight: 600; }
+.badge-amber  { background: var(--amber-wash);  color: var(--amber);    border-radius: 4px; padding: 1px 8px; font-size: 11px; font-weight: 600; }
+.badge-rose   { background: var(--rose-wash);   color: var(--rose);     border-radius: 4px; padding: 1px 8px; font-size: 11px; font-weight: 600; }
+.badge-violet { background: var(--violet-wash); color: var(--violet);   border-radius: 4px; padding: 1px 8px; font-size: 11px; font-weight: 600; }
+
+/* Section label — sentence-case, ruled border below, no all-caps eyebrow */
+.section-label {
+  font-family: 'Archivo', sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 12px;
+  letter-spacing: 0.01em;
+}
+
+/* Rail navigation item */
+.rail-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 7px 10px;
+  border-radius: 6px;
+  font-family: 'Archivo', sans-serif;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--muted);
+  transition: background 0.15s, color 0.15s;
+  cursor: pointer;
+  border: none;
+  background: none;
+}
+
+.rail-item:hover {
+  background: var(--surface-hover);
+  color: var(--ink);
+}
+
+.rail-item.active {
+  background: var(--teal-wash);
+  color: var(--teal-ink);
+  font-weight: 600;
+}
+
+/* Primary action button & elements on solid teal */
+.btn-primary,
+.glow-btn-primary,
+.text-on-teal {
+  color: #ffffff;
+}
+
+.btn-primary,
 .glow-btn-primary {
-  background: linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%);
-  box-shadow: 0 4px 12px 0 rgba(37, 99, 235, 0.25);
-  transition: all 0.2s ease-in-out;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--teal);
+  border: none;
+  border-radius: 6px;
+  padding: 7px 16px;
+  font-family: 'Archivo', sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.15s, transform 0.1s;
+  text-decoration: none;
 }
 
+.btn-primary:hover:not(:disabled),
 .glow-btn-primary:hover:not(:disabled) {
-  background: linear-gradient(135deg, #3B82F6 0%, #2563EB 100%);
-  box-shadow: 0 6px 18px 0 rgba(37, 99, 235, 0.35);
-  transform: translateY(-1px);
+  opacity: 0.88;
 }
 
+.btn-primary:active:not(:disabled),
 .glow-btn-primary:active:not(:disabled) {
-  transform: translateY(0);
-  box-shadow: 0 2px 6px 0 rgba(37, 99, 235, 0.2);
+  transform: scale(0.98);
 }
 
-/* Prose for Sanitized Email Bodies in Light Mode */
+.btn-primary:disabled,
+.glow-btn-primary:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* In both light and dark mode, primary navy/cobalt buttons use crisp white text for high-contrast executive styling */
+.btn-primary,
+.glow-btn-primary,
+.text-on-teal,
+.dark .btn-primary,
+.dark .glow-btn-primary,
+.dark .text-on-teal,
+[data-theme="dark"] .btn-primary,
+[data-theme="dark"] .glow-btn-primary,
+[data-theme="dark"] .text-on-teal {
+  color: #ffffff !important;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]):not(.light) .btn-primary,
+  :root:not([data-theme="light"]):not(.light) .glow-btn-primary,
+  :root:not([data-theme="light"]):not(.light) .text-on-teal {
+    color: #ffffff !important;
+  }
+}
+
+/* ─── Universal Theme Contrast Enforcement ────────────────────────────────────
+   Core Principles:
+   1. Light theme canvas  → Font inherits from CSS variable --ink (black)
+   2. Dark theme canvas   → Force pure white on structural elements
+   3. Dark-background buttons/banners → white text
+   4. Ghost/secondary in light theme  → black; in dark theme → white (via .dark rule)
+   NOTE: We do NOT force-override intentional text colors (e.g. text-blue-700)
+         on white-background buttons — that breaks active-tab / colored UI states.
+   ──────────────────────────────────────────────────────────────────────────── */
+
+/* ── 1. Light Theme defaults ── */
+:root:not(.dark):not([data-theme="dark"]) body,
+:root:not(.dark):not([data-theme="dark"]) main,
+:root:not(.dark):not([data-theme="dark"]) header,
+:root:not(.dark):not([data-theme="dark"]) nav,
+:root:not(.dark):not([data-theme="dark"]) aside {
+  color: #000000;
+}
+
+:where(:root:not(.dark):not([data-theme="dark"])) h1:not([class*="text-"]),
+:where(:root:not(.dark):not([data-theme="dark"])) h2:not([class*="text-"]),
+:where(:root:not(.dark):not([data-theme="dark"])) h3:not([class*="text-"]),
+:where(:root:not(.dark):not([data-theme="dark"])) h4:not([class*="text-"]),
+:where(:root:not(.dark):not([data-theme="dark"])) h5:not([class*="text-"]),
+:where(:root:not(.dark):not([data-theme="dark"])) h6:not([class*="text-"]) {
+  color: #000000;
+}
+
+:root:not(.dark):not([data-theme="dark"]) input:not([type="checkbox"]):not([type="radio"]),
+:root:not(.dark):not([data-theme="dark"]) select,
+:root:not(.dark):not([data-theme="dark"]) textarea {
+  color: #000000;
+}
+
+/* ── 2. Dark Theme — structural elements → pure white ── */
+.dark body,
+[data-theme="dark"] body,
+.dark main, [data-theme="dark"] main,
+.dark header, [data-theme="dark"] header,
+.dark nav, [data-theme="dark"] nav,
+.dark aside, [data-theme="dark"] aside,
+.dark h1, .dark h2, .dark h3, .dark h4, .dark h5, .dark h6,
+[data-theme="dark"] h1, [data-theme="dark"] h2, [data-theme="dark"] h3,
+[data-theme="dark"] h4, [data-theme="dark"] h5, [data-theme="dark"] h6 {
+  color: #FFFFFF !important;
+}
+
+.dark .card,
+[data-theme="dark"] .card,
+.dark .ruled-card,
+[data-theme="dark"] .ruled-card {
+  color: #FFFFFF;
+}
+
+/* ── 3. Primary & Glowing buttons have crisp white text ── */
+.btn-primary,
+.glow-btn-primary,
+button.btn-primary,
+button.glow-btn-primary,
+a.btn-primary,
+a.glow-btn-primary {
+  color: #FFFFFF !important;
+}
+
+.btn-primary *,
+.glow-btn-primary * {
+  color: #FFFFFF !important;
+}
+
+/* Dark mode ghost / secondary buttons */
+.dark .btn-ghost,
+.dark .btn-secondary,
+[data-theme="dark"] .btn-ghost,
+[data-theme="dark"] .btn-secondary {
+  color: #FFFFFF !important;
+}
+
+:root:not(.dark):not([data-theme="dark"]) .btn-ghost,
+:root:not(.dark):not([data-theme="dark"]) .btn-secondary {
+  color: var(--ink) !important;
+}
+
+/* ── Segmented Control & Tab Switchers ── */
+.tab-btn-active {
+  background: var(--surface) !important;
+  color: var(--teal) !important;
+  font-weight: 700 !important;
+  box-shadow: var(--shadow) !important;
+}
+
+.tab-btn-active * {
+  color: var(--teal) !important;
+}
+
+.tab-btn-inactive {
+  background: transparent !important;
+  color: var(--muted) !important;
+  font-weight: 500 !important;
+}
+
+.tab-btn-inactive * {
+  color: var(--muted) !important;
+}
+
+.tab-btn-inactive:hover,
+.tab-btn-inactive:hover * {
+  color: var(--ink) !important;
+}
+
+/* Explicit dark banners (opt-in classes, NOT Tailwind class substrings) */
+.dark-banner,
+.banner-dark {
+  color: #FFFFFF !important;
+}
+
+.dark-banner h1, .dark-banner h2, .dark-banner h3, .dark-banner h4,
+.banner-dark h1, .banner-dark h2, .banner-dark h3, .banner-dark h4 {
+  color: #FFFFFF !important;
+}
+
+.dark-banner p,
+.banner-dark p {
+  color: #F8FAFC !important;
+}
+
+/* Ghost / outline button */
+.btn-ghost {
+  background: transparent;
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 6px 14px;
+  font-family: 'Archivo', sans-serif;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.btn-ghost:hover:not(:disabled) {
+  background: var(--surface-hover);
+}
+
+/* Email body prose */
 .email-rendered-body {
-  font-family: inherit;
+  font-family: 'Archivo', sans-serif;
   line-height: 1.65;
-  color: #1E293B;
+  color: var(--ink);
 }
-.email-rendered-body a {
-  color: #2563EB;
-  text-decoration: underline;
-  text-underline-offset: 2px;
+
+.email-rendered-body p,
+.email-rendered-body li {
+  color: inherit;
 }
-.email-rendered-body a:hover {
-  color: #1D4ED8;
-}
+
 .email-rendered-body p {
   margin-top: 0.75rem;
   margin-bottom: 0.75rem;
 }
-.email-rendered-body h1, .email-rendered-body h2, .email-rendered-body h3 {
-  color: #0F172A;
+
+.email-rendered-body pre {
+  font-family: 'JetBrains Mono', monospace, 'Archivo', sans-serif;
+  white-space: pre-wrap;
+  word-break: break-word;
+  background: var(--surface-2);
+  color: var(--ink);
+  padding: 0.75rem 1rem;
+  border-radius: 0.5rem;
+  border: 1px solid var(--line-soft);
+}
+
+/* Standard inline links in email text */
+.email-rendered-body a:not([style*="background"]):not([style*="background-color"]):not([class*="btn"]):not(.email-action-btn) {
+  color: var(--teal);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.email-rendered-body a:not([style*="background"]):not([style*="background-color"]):not([class*="btn"]):not(.email-action-btn):hover {
+  opacity: 0.85;
+}
+
+/* Call to Action Buttons in emails - NEVER hide text! Ensure solid contrast */
+.email-rendered-body a[style*="background"],
+.email-rendered-body a[style*="background-color"],
+.email-rendered-body a[class*="btn"],
+.email-rendered-body a.email-action-btn,
+.email-rendered-body .email-action-btn,
+.email-rendered-body [role="button"] {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 8px !important;
+  color: #FFFFFF !important;
+  text-decoration: none !important;
+  font-weight: 700 !important;
+  font-size: 13px !important;
+  border-radius: 8px !important;
+  letter-spacing: 0.01em !important;
+  cursor: pointer !important;
+  box-shadow: 0 2px 8px rgba(10, 54, 157, 0.25) !important;
+  transition: all 0.2s ease !important;
+}
+
+.email-rendered-body a[style*="background"]:hover,
+.email-rendered-body a[style*="background-color"]:hover,
+.email-rendered-body a[class*="btn"]:hover,
+.email-rendered-body a.email-action-btn:hover {
+  opacity: 0.92 !important;
+  transform: translateY(-1px) !important;
+  box-shadow: 0 4px 12px rgba(10, 54, 157, 0.35) !important;
+}
+
+/* Dark header cards inside emails keep white text & crisp contrast */
+.email-rendered-body [style*="background: #0A192F"],
+.email-rendered-body [style*="background:#0A192F"],
+.email-rendered-body [style*="background: #0a192f"],
+.email-rendered-body [style*="background:#0a192f"],
+.email-rendered-body [style*="background-color: #0A192F"] {
+  color: #FFFFFF !important;
+}
+
+.email-rendered-body [style*="background: #0A192F"] h1,
+.email-rendered-body [style*="background: #0A192F"] h2,
+.email-rendered-body [style*="background: #0A192F"] h3,
+.email-rendered-body [style*="background:#0A192F"] h1,
+.email-rendered-body [style*="background:#0A192F"] h2,
+.email-rendered-body [style*="background:#0A192F"] h3 {
+  color: #FFFFFF !important;
+}
+
+.email-rendered-body [style*="background: #0A192F"] p,
+.email-rendered-body [style*="background:#0A192F"] p {
+  color: #94A3B8 !important;
+}
+
+/* Headings in standard email prose */
+.email-rendered-body h1,
+.email-rendered-body h2,
+.email-rendered-body h3 {
+  font-family: 'Bricolage Grotesque', sans-serif;
+  color: var(--ink);
   font-weight: 700;
   margin-top: 1.25rem;
   margin-bottom: 0.5rem;
 }
-.email-rendered-body blockquote {
-  border-left: 3px solid #2563EB;
-  padding-left: 1rem;
-  margin: 1rem 0;
-  color: #475569;
-  font-style: italic;
-  background: #F8FAFC;
-  padding: 0.5rem 1rem;
-  border-radius: 0 0.5rem 0.5rem 0;
-}
+
+/* Table rules: clean collapse, no forced borders on cells */
 .email-rendered-body table {
   width: 100%;
   border-collapse: collapse;
-  margin: 1rem 0;
 }
-.email-rendered-body th, .email-rendered-body td {
-  border: 1px solid #E2E8F0;
+
+.email-rendered-body table.table-bordered th,
+.email-rendered-body table.table-bordered td {
+  border: 1px solid var(--line-soft);
   padding: 0.5rem 0.75rem;
-  text-align: left;
+  font-size: 0.8125rem;
 }
-.email-rendered-body th {
-  background: #F8FAFC;
-  font-weight: 600;
-  color: #334155;
+
+.email-rendered-body blockquote {
+  border-left: 3px solid var(--teal);
+  padding: 0.5rem 1rem;
+  margin: 1rem 0;
+  color: var(--muted);
+  font-style: italic;
+  background: var(--teal-dim);
+  border-radius: 0 4px 4px 0;
 }
+
+/* Adaptive dark mode overrides for email cards with hardcoded light styles */
+.dark .email-rendered-body [style*="background: #FFFFFF"],
+.dark .email-rendered-body [style*="background:#FFFFFF"],
+.dark .email-rendered-body [style*="background: #ffffff"],
+.dark .email-rendered-body [style*="background:#ffffff"],
+.dark .email-rendered-body [style*="background: white"],
+.dark .email-rendered-body [style*="background-color: #FFFFFF"],
+.dark .email-rendered-body [style*="background-color:#FFFFFF"] {
+  background: var(--surface) !important;
+  border-color: var(--line) !important;
+  color: var(--ink) !important;
+}
+
+.dark .email-rendered-body [style*="color: #0A192F"],
+.dark .email-rendered-body [style*="color:#0A192F"],
+.dark .email-rendered-body [style*="color: #0a192f"] {
+  color: var(--ink) !important;
+}
+
+.dark .email-rendered-body [style*="color: #64748B"],
+.dark .email-rendered-body [style*="color:#64748B"] {
+  color: var(--muted) !important;
+}
+
+.dark .email-rendered-body [style*="border-bottom: 1px solid #F1F5F9"],
+.dark .email-rendered-body [style*="border-bottom: 1px solid #f1f5f9"],
+.dark .email-rendered-body [style*="border-bottom:1px solid #F1F5F9"] {
+  border-color: var(--line-soft) !important;
+}
+
+/* Focus rings for keyboard nav */
+*:focus-visible {
+  outline: 2px solid var(--teal);
+  outline-offset: 2px;
+}
+
+/* ─── Dark Mode Contrast Protection ─────────────────────────────────────────
+   Guarantees that hardcoded utility classes (text-slate-*, bg-white, etc.)
+   automatically respect dark mode tokens so no text is ever dark-on-dark.
+   ──────────────────────────────────────────────────────────────────────────── */
+/* ─── Dark Mode: Tailwind text-color → theme tokens ─────────────────────────
+   These override hardcoded dark Tailwind text classes to their theme-aware
+   equivalents so text is always readable on dark backgrounds.
+   ──────────────────────────────────────────────────────────────────────────── */
+.dark .text-slate-950,
+.dark .text-slate-900,
+.dark .text-slate-800,
+.dark .text-slate-700,
+.dark .text-black,
+.dark .text-gray-950,
+.dark .text-gray-900,
+.dark .text-gray-800,
+.dark .text-gray-700,
+.dark .text-zinc-950,
+.dark .text-zinc-900,
+.dark .text-zinc-800,
+.dark .text-zinc-700,
+.dark .text-neutral-900,
+.dark .text-neutral-800,
+[data-theme="dark"] .text-slate-950,
+[data-theme="dark"] .text-slate-900,
+[data-theme="dark"] .text-slate-800,
+[data-theme="dark"] .text-slate-700,
+[data-theme="dark"] .text-black,
+[data-theme="dark"] .text-gray-950,
+[data-theme="dark"] .text-gray-900,
+[data-theme="dark"] .text-gray-800,
+[data-theme="dark"] .text-gray-700,
+[data-theme="dark"] .text-zinc-950,
+[data-theme="dark"] .text-zinc-900,
+[data-theme="dark"] .text-zinc-800,
+[data-theme="dark"] .text-zinc-700,
+[data-theme="dark"] .text-neutral-900,
+[data-theme="dark"] .text-neutral-800 {
+  color: var(--ink) !important;
+}
+
+.dark .text-slate-600,
+.dark .text-slate-500,
+.dark .text-slate-400,
+.dark .text-gray-600,
+.dark .text-gray-500,
+.dark .text-gray-400,
+.dark .text-zinc-600,
+.dark .text-zinc-500,
+.dark .text-zinc-400,
+.dark .text-neutral-600,
+.dark .text-neutral-500,
+[data-theme="dark"] .text-slate-600,
+[data-theme="dark"] .text-slate-500,
+[data-theme="dark"] .text-slate-400,
+[data-theme="dark"] .text-gray-600,
+[data-theme="dark"] .text-gray-500,
+[data-theme="dark"] .text-gray-400,
+[data-theme="dark"] .text-zinc-600,
+[data-theme="dark"] .text-zinc-500,
+[data-theme="dark"] .text-zinc-400,
+[data-theme="dark"] .text-neutral-600,
+[data-theme="dark"] .text-neutral-500 {
+  color: var(--muted) !important;
+}
+
+/* Dark mode inputs → ensure readable text */
+.dark input:not([type="checkbox"]):not([type="radio"]),
+.dark select,
+.dark textarea,
+[data-theme="dark"] input:not([type="checkbox"]):not([type="radio"]),
+[data-theme="dark"] select,
+[data-theme="dark"] textarea {
+  color: var(--ink) !important;
+}
+
+/* ─── Dark Mode: flip pure solid light backgrounds to dark surfaces ──────────
+   IMPORTANT: Only exact class tokens (bg-white, bg-slate-50) are flipped.
+   Opacity variants like bg-white/10, bg-slate-50/70 are intentional
+   glassmorphism overlays and must NOT be overridden here.
+   ──────────────────────────────────────────────────────────────────────────── */
+.dark .bg-white,
+[data-theme="dark"] .bg-white {
+  background-color: var(--surface) !important;
+}
+
+.dark .bg-slate-50,
+.dark .bg-slate-100,
+.dark .bg-gray-50,
+.dark .bg-gray-100,
+[data-theme="dark"] .bg-slate-50,
+[data-theme="dark"] .bg-slate-100,
+[data-theme="dark"] .bg-gray-50,
+[data-theme="dark"] .bg-gray-100 {
+  background-color: var(--surface-2) !important;
+}
+
+/* Focus/focus-within states on inputs also need dark-mode overrides */
+.dark .focus\:bg-white:focus,
+[data-theme="dark"] .focus\:bg-white:focus {
+  background-color: var(--surface) !important;
+}
+
+.dark .focus-within\:bg-white:focus-within,
+[data-theme="dark"] .focus-within\:bg-white:focus-within {
+  background-color: var(--surface) !important;
+}
+
+.dark .focus\:bg-slate-50:focus,
+.dark .focus\:bg-slate-100:focus,
+[data-theme="dark"] .focus\:bg-slate-50:focus,
+[data-theme="dark"] .focus\:bg-slate-100:focus {
+  background-color: var(--surface-2) !important;
+}
+
+.dark .border-slate-100,
+.dark .border-gray-100,
+[data-theme="dark"] .border-slate-100,
+[data-theme="dark"] .border-gray-100 {
+  border-color: var(--line-soft) !important;
+}
+
+.dark .border-slate-200,
+.dark .border-slate-300,
+.dark .border-gray-200,
+.dark .border-gray-300,
+[data-theme="dark"] .border-slate-200,
+[data-theme="dark"] .border-slate-300,
+[data-theme="dark"] .border-gray-200,
+[data-theme="dark"] .border-gray-300 {
+  border-color: var(--line) !important;
+}
+
+/* ─── Dark Mode Hover Protection ─────────────────────────────────────────────
+   Prevents light backgrounds from flashing on hover in dark mode.
+   Tailwind hover: classes are applied as plain utility classes when hovered,
+   so we override them in dark mode with dark surface tokens.
+   ──────────────────────────────────────────────────────────────────────────── */
+.dark *:hover > .hover\:bg-white,
+.dark .hover\:bg-white:hover,
+[data-theme="dark"] .hover\:bg-white:hover {
+  background-color: var(--surface-hover) !important;
+}
+
+.dark .hover\:bg-slate-50:hover,
+.dark .hover\:bg-slate-100:hover,
+.dark .hover\:bg-gray-50:hover,
+.dark .hover\:bg-gray-100:hover,
+[data-theme="dark"] .hover\:bg-slate-50:hover,
+[data-theme="dark"] .hover\:bg-slate-100:hover,
+[data-theme="dark"] .hover\:bg-gray-50:hover,
+[data-theme="dark"] .hover\:bg-gray-100:hover {
+  background-color: var(--surface-2) !important;
+}
+
+/* Dark mode hover text-color overrides: prevent dark text on hover in dark mode */
+.dark .hover\:text-slate-900:hover,
+.dark .hover\:text-slate-800:hover,
+.dark .hover\:text-gray-900:hover,
+.dark .hover\:text-gray-800:hover,
+.dark .hover\:text-zinc-900:hover,
+[data-theme="dark"] .hover\:text-slate-900:hover,
+[data-theme="dark"] .hover\:text-slate-800:hover,
+[data-theme="dark"] .hover\:text-gray-900:hover,
+[data-theme="dark"] .hover\:text-gray-800:hover,
+[data-theme="dark"] .hover\:text-zinc-900:hover {
+  color: var(--ink) !important;
+}
+
+/* Placeholder text in dark mode */
+.dark ::placeholder,
+[data-theme="dark"] ::placeholder {
+  color: var(--muted) !important;
+  opacity: 0.7;
+}
+
+/* ─── Responsive & Accessibility Hardening (§§ 19, 20) ─────────────────────── */
+html, body {
+  max-width: 100vw;
+  overflow-x: hidden;
+}
+
+*:focus-visible {
+  outline: 2px solid var(--teal);
+  outline-offset: 2px;
+}
+
+@media (max-width: 768px) {
+  button:not(.chip-btn):not(.no-touch-expand),
+  a:not(.inline-link):not(.no-touch-expand),
+  input:not([type="checkbox"]):not([type="radio"]),
+  select,
+  textarea {
+    min-height: 44px;
+  }
+}
+
+
+

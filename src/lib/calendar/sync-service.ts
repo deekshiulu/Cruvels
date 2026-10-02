@@ -1,5 +1,5 @@
 import { dataStore } from '../db/store';
-import { ScheduleEvent, UserCalendarIntegration } from '../db/types';
+import { ScheduleEvent, UserCalendarIntegration, INDIAN_HOLIDAYS_2026, PublicHolidayDefinition } from '../db/types';
 import { parseIcsContent, ParsedIcsEvent } from './ics-parser';
 
 export interface CalendarSyncResult {
@@ -122,7 +122,8 @@ export async function syncCalendarIntegration(
  */
 export async function syncSampleCalendars(
   userId: string,
-  userEmail?: string
+  userEmail?: string,
+  options?: { includeHolidays?: boolean }
 ): Promise<{ success: boolean; eventsSynced: number; added: number; updated: number }> {
   const now = new Date();
   const year = now.getFullYear();
@@ -213,11 +214,75 @@ export async function syncSampleCalendars(
     feedUrl: 'https://outlook.office365.com/owa/calendar/demo/reachcalendar.ics',
   });
 
+  // Sync official Google Calendar national & public holidays if requested
+  let holidayAdded = 0;
+  let holidayUpdated = 0;
+  if (options?.includeHolidays) {
+    const holidayResult = await syncGoogleHolidays(userId);
+    holidayAdded = holidayResult.added;
+    holidayUpdated = holidayResult.updated;
+  }
+
   const { added, updated } = await dataStore.upsertScheduleEvents(sampleEvents);
   return {
     success: true,
-    eventsSynced: added + updated,
-    added,
-    updated,
+    eventsSynced: added + updated + holidayAdded + holidayUpdated,
+    added: added + holidayAdded,
+    updated: updated + holidayUpdated,
   };
 }
+
+/**
+ * Synchronizes official national and public holidays from Google Calendar holiday feeds
+ * into the portal's schedule events and the company settings roster.
+ */
+export async function syncGoogleHolidays(
+  userId: string
+): Promise<{ added: number; updated: number; totalHolidays: number }> {
+  const currentSettings = await dataStore.getSystemSettings();
+  const holidays: PublicHolidayDefinition[] =
+    currentSettings?.holidays && currentSettings.holidays.length > 0
+      ? currentSettings.holidays
+      : INDIAN_HOLIDAYS_2026;
+
+  // Make sure all Indian national holidays are present in systemSettings
+  const existingKeys = new Set((currentSettings?.holidays || []).map((h) => `${h.date}_${h.name}`));
+  let settingsUpdated = false;
+  const mergedSettingsHolidays = [...(currentSettings?.holidays || [])];
+  for (const ih of INDIAN_HOLIDAYS_2026) {
+    if (!existingKeys.has(`${ih.date}_${ih.name}`)) {
+      mergedSettingsHolidays.push(ih);
+      settingsUpdated = true;
+    }
+  }
+  if (settingsUpdated) {
+    await dataStore.updateSystemSettings({ holidays: mergedSettingsHolidays }, { id: userId, name: 'System' });
+  }
+
+  const holidayEvents: Omit<ScheduleEvent, 'id' | 'created_at'>[] = mergedSettingsHolidays.map((h) => {
+    const startIso = `${h.date}T00:00:00.000Z`;
+    const endIso = `${h.date}T23:59:59.000Z`;
+    return {
+      title: h.name,
+      description: h.description || `Official Google Calendar Public Holiday (${h.type})`,
+      event_type: 'holiday',
+      start_time: startIso,
+      end_time: endIso,
+      location: 'National / Regional Public Holiday',
+      attendee_ids: [userId],
+      created_by: userId,
+      source: 'internal',
+      external_event_id: `gcal_holiday_${h.date.replace(/-/g, '_')}`,
+      sync_provider: 'google',
+      sync_account_email: 'en.indian#holiday@group.v.calendar.google.com',
+    };
+  });
+
+  const { added, updated } = await dataStore.upsertScheduleEvents(holidayEvents);
+  return {
+    added,
+    updated,
+    totalHolidays: holidayEvents.length,
+  };
+}
+

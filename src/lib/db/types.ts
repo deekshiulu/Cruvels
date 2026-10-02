@@ -198,6 +198,84 @@ export type CreateEmployeeInput = {
 
 export type AttendanceStatus = 'PRESENT' | 'WORK_FROM_HOME' | 'HALF_DAY' | 'ON_LEAVE' | 'ABSENT';
 
+export interface AttendanceRuleConfig {
+  markingDeadline: string; // e.g. "10:00" in 24h format
+  workingDays: number[]; // [1, 2, 3, 4, 5] (1=Mon, 7=Sun)
+  checkInCheckOutRequired: boolean;
+  lateMarkingAllowed: boolean;
+  gracePeriodMinutes: number; // e.g. 30
+  allowSelfEditAfterSubmission: boolean;
+  correctionApproverRole: 'admin' | 'group_leader' | 'manager';
+  reminderTimes: string[]; // e.g. ['09:30', '10:00', '10:30']
+}
+
+export const DEFAULT_ATTENDANCE_RULES: AttendanceRuleConfig = {
+  markingDeadline: '10:00',
+  workingDays: [1, 2, 3, 4, 5],
+  checkInCheckOutRequired: false,
+  lateMarkingAllowed: true,
+  gracePeriodMinutes: 30,
+  allowSelfEditAfterSubmission: false,
+  correctionApproverRole: 'admin',
+  reminderTimes: ['09:30', '10:00', '10:30'],
+};
+
+export type AttendanceCorrectionStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
+
+export interface AttendanceCorrectionRequest {
+  id: string;
+  user_id: string;
+  employee_id: string;
+  employee_name: string;
+  department_name: string;
+  group_id?: string | null;
+  group_name?: string | null;
+  date: string; // YYYY-MM-DD
+  current_status: string;
+  requested_status: AttendanceStatus;
+  reason: string;
+  status: AttendanceCorrectionStatus;
+  reviewed_by_id?: string | null;
+  reviewed_by_name?: string | null;
+  reviewed_at?: string | null;
+  review_notes?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export type ComplianceStatus =
+  | 'MARKED_PRESENT'
+  | 'MARKED_LATE'
+  | 'NOT_MARKED'
+  | 'ON_LEAVE'
+  | 'HOLIDAY'
+  | 'CORRECTION_PENDING';
+
+export interface AttendanceComplianceSummary {
+  date: string;
+  total_active_employees: number;
+  present_count: number;
+  not_marked_count: number;
+  late_count: number;
+  on_leave_count: number;
+  pending_corrections_count: number;
+  compliance_percentage: number;
+}
+
+export interface IndividualComplianceRecord {
+  employee_id: string;
+  employee_name: string;
+  department_name: string;
+  group_name: string;
+  month: string;
+  present_days: number;
+  late_days: number;
+  missing_days: number;
+  leave_days: number;
+  correction_count: number;
+  compliance_rate: number;
+}
+
 export interface AttendanceRecord {
   id: string;
   employee_id: string;
@@ -248,11 +326,15 @@ export interface Notice {
   is_pinned: boolean;
   author_id: string;
   author_name: string;
+  requires_acknowledgement?: boolean;
+  acknowledgement_due_date?: string;
+  target_audience?: 'all' | 'interns' | 'employees' | 'engineering' | 'squad';
+  target_group_id?: string;
   created_at: string;
   updated_at: string;
 }
 
-export type EventType = 'meeting' | 'shift' | 'holiday' | 'event';
+export type EventType = 'meeting' | 'shift' | 'holiday' | 'event' | 'company_event' | 'deadline' | 'reminder';
 export type EventSource = 'internal' | 'google' | 'microsoft' | 'external';
 
 export interface ScheduleEvent {
@@ -270,6 +352,7 @@ export interface ScheduleEvent {
   source?: EventSource;
   external_event_id?: string;
   meeting_link?: string;
+  meeting_platform?: 'google_meet' | 'zoom' | 'teams' | 'other';
   sync_provider?: 'google' | 'microsoft';
   sync_account_email?: string;
 }
@@ -312,8 +395,25 @@ export interface Note {
   updated_at: string;
 }
 
-export type TaskStatus = 'todo' | 'in_progress' | 'in_review' | 'done';
+export type TaskStatus = 'todo' | 'in_progress' | 'blocked' | 'in_review' | 'done';
 export type TaskPriority = 'low' | 'medium' | 'high' | 'urgent';
+
+export interface TaskComment {
+  id: string;
+  task_id: string;
+  author_id: string;
+  author_name: string;
+  content: string;
+  created_at: string;
+}
+
+export interface TaskAttachment {
+  id: string;
+  name: string;
+  url: string;
+  size_bytes?: number;
+  uploaded_at: string;
+}
 
 export interface TaskActivityEntry {
   at: string;
@@ -336,6 +436,13 @@ export interface TaskItem {
   assigned_to_name: string;
   created_by_id: string;
   created_by_name: string;
+  assigned_poc_id?: string;
+  assigned_poc_name?: string;
+  attachments?: TaskAttachment[];
+  comments?: TaskComment[];
+  requires_acknowledgement?: boolean;
+  acknowledged_at?: string;
+  acknowledged_by_id?: string;
   activity: TaskActivityEntry[];
   created_at: string;
   updated_at: string;
@@ -350,7 +457,11 @@ export type NotificationType =
   | 'schedule'
   | 'leave_approval'
   | 'leave_status'
+  | 'attendance_missing'
+  | 'acknowledgement_required'
   | 'system';
+
+export type NotificationState = 'unread' | 'read' | 'action_required' | 'acknowledged' | 'expired';
 
 export interface AppNotification {
   id: string;
@@ -360,10 +471,34 @@ export interface AppNotification {
   title: string;
   message: string;
   link_url?: string;
+  action_url?: string;
+  action_label?: string;
   is_read: boolean;
+  state?: NotificationState;
   metadata?: Record<string, any>;
   created_at: string;
 }
+
+export interface NotificationPreference {
+  user_id: string;
+  portal_notifications: boolean;
+  email_notifications: boolean;
+  push_notifications: boolean;
+  task_reminders: boolean;
+  announcements: boolean;
+  // Immutable compliance locks (§ 11):
+  // attendance_compliance: always true
+  // security_alerts: always true
+  updated_at: string;
+}
+
+export const DEFAULT_NOTIFICATION_PREFERENCES: Omit<NotificationPreference, 'user_id' | 'updated_at'> = {
+  portal_notifications: true,
+  email_notifications: true,
+  push_notifications: true,
+  task_reminders: true,
+  announcements: true,
+};
 
 export interface PushSubscriptionItem {
   id: string;
@@ -389,3 +524,152 @@ export interface UserCalendarIntegration {
   created_at: string;
   updated_at: string;
 }
+
+// ============================================================================
+// UNIVERSAL ACKNOWLEDGEMENT SYSTEM (Roadmap §§ 5, 6, 7, 8, 29)
+// ============================================================================
+
+export type AcknowledgementItemType =
+  | 'task'
+  | 'notice'
+  | 'policy'
+  | 'document'
+  | 'notification'
+  | 'communication';
+
+export type AcknowledgementStatus =
+  | 'not_required'
+  | 'pending'
+  | 'acknowledged'
+  | 'overdue';
+
+export interface UniversalAcknowledgement {
+  id: string;
+  item_type: AcknowledgementItemType;
+  item_id: string;
+  item_title: string;
+  recipient_user_id: string;
+  recipient_name?: string;
+  recipient_role?: string;
+  recipient_email?: string;
+  department_id?: string;
+  department_name?: string;
+  group_id?: string | null;
+  group_name?: string | null;
+  status: AcknowledgementStatus;
+  due_at?: string; // ISO date-time or YYYY-MM-DD
+  acknowledged_at?: string; // ISO date-time
+  acknowledged_ip?: string;
+  acknowledged_user_agent?: string;
+  notes?: string;
+  created_at: string;
+  updated_at: string;
+  metadata?: Record<string, any>;
+}
+
+export interface AcknowledgementSummary {
+  itemId: string;
+  itemType: AcknowledgementItemType;
+  itemTitle: string;
+  totalRecipients: number;
+  acknowledgedCount: number;
+  pendingCount: number;
+  overdueCount: number;
+  complianceRate: number; // percentage (0-100)
+  dueAt?: string;
+  recipients: {
+    id: string;
+    userId: string;
+    name: string;
+    role: string;
+    departmentName: string;
+    groupName?: string;
+    status: AcknowledgementStatus;
+    dueAt?: string;
+    acknowledgedAt?: string;
+  }[];
+}
+
+// -------------------------------------------------------------
+// GOOGLE DRIVE & WORKSPACE EXPLORER (Roadmap § 12)
+// -------------------------------------------------------------
+export type DriveSection = 'my_files' | 'shared_files' | 'project_files' | 'company_resources';
+export type DriveFileType = 'doc' | 'sheet' | 'slide' | 'pdf' | 'folder' | 'archive' | 'link';
+
+export interface DriveResource {
+  id: string;
+  name: string;
+  description?: string;
+  section: DriveSection;
+  file_type: DriveFileType;
+  external_url: string; // Google Drive / Docs / Sheets link
+  owner_user_id: string;
+  owner_name: string;
+  group_id?: string; // Squad binding
+  group_name?: string;
+  is_company_wide?: boolean;
+  shared_with_user_ids?: string[];
+  size_label?: string;
+  parent_folder_id?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+// -------------------------------------------------------------
+// DYNAMIC SYSTEM SETTINGS & CONFIGURATION (Roadmap § 15)
+// -------------------------------------------------------------
+export interface ReminderTimingConfig {
+  first_reminder: string; // e.g. "09:30"
+  second_reminder: string; // e.g. "10:00"
+  deadline_warning: boolean;
+}
+
+export interface TaskReminderIntervalConfig {
+  unacknowledged_hours: number; // e.g. 24
+  deadline_prior_hours: number[]; // e.g. [24, 4]
+  overdue_escalation_hours: number; // e.g. 12
+}
+
+export interface SystemSettings {
+  portalName: string;
+  supportEmail: string;
+  attendanceRules: AttendanceRuleConfig;
+  reminderTiming: ReminderTimingConfig;
+  taskReminderIntervals: TaskReminderIntervalConfig;
+  holidays: PublicHolidayDefinition[];
+  allowSelfEditAfterSubmission: boolean;
+  updated_at?: string;
+  updated_by_id?: string;
+  updated_by_name?: string;
+}
+
+export const DEFAULT_SYSTEM_SETTINGS: SystemSettings = {
+  portalName: 'Cruvels Workplace OS',
+  supportEmail: 'ops@cruvels.com',
+  attendanceRules: { ...DEFAULT_ATTENDANCE_RULES },
+  reminderTiming: {
+    first_reminder: '09:30',
+    second_reminder: '10:00',
+    deadline_warning: true,
+  },
+  taskReminderIntervals: {
+    unacknowledged_hours: 24,
+    deadline_prior_hours: [24, 4],
+    overdue_escalation_hours: 12,
+  },
+  holidays: [...INDIAN_HOLIDAYS_2026],
+  allowSelfEditAfterSubmission: false,
+};
+
+export interface MailReminder {
+  id: string;
+  user_id: string;
+  message_id: string;
+  message_subject: string;
+  remind_at: string; // ISO string
+  note?: string;
+  is_completed: boolean;
+  created_at: string;
+  updated_at: string;
+}
+

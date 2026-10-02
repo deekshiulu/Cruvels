@@ -43,25 +43,36 @@ export async function GET(
         attendance: { summary: null, recent: [] },
         tasks: { summary: null, list: [] },
         leaves: { balances: null, history: [] },
+        meetings: { summary: null, list: [] },
         user: null,
         restricted: true,
       });
     }
 
     // Fetch full 360 profile telemetry
-    const [attendanceRecords, tasks, leaves, linkedUser] = await Promise.all([
+    const [attendanceRecords, tasks, leaves, linkedUser, allEvents] = await Promise.all([
       dataStore.getAttendanceRecords({ employeeId: employee.id }),
       dataStore.getTasks({ assignedToId: employee.id }),
       dataStore.getLeaveRequests({ employeeId: employee.id }),
       employee.user_id ? dataStore.getUserById(employee.user_id) : null,
+      dataStore.getScheduleEvents(),
     ]);
+
+    const presentCount = attendanceRecords.filter((r) => r.status === 'PRESENT').length;
+    const halfDayCount = attendanceRecords.filter((r) => r.status === 'HALF_DAY').length;
+    const onLeaveCount = attendanceRecords.filter((r) => r.status === 'ON_LEAVE').length;
+    const absentCount = attendanceRecords.filter((r) => r.status === 'ABSENT').length;
+    const complianceRate = attendanceRecords.length > 0
+      ? Math.round(((presentCount + halfDayCount * 0.5) / attendanceRecords.length) * 100)
+      : 100;
 
     const attendanceSummary = {
       totalRecords: attendanceRecords.length,
-      present: attendanceRecords.filter((r) => r.status === 'PRESENT').length,
-      halfDay: attendanceRecords.filter((r) => r.status === 'HALF_DAY').length,
-      onLeave: attendanceRecords.filter((r) => r.status === 'ON_LEAVE').length,
-      absent: attendanceRecords.filter((r) => r.status === 'ABSENT').length,
+      present: presentCount,
+      halfDay: halfDayCount,
+      onLeave: onLeaveCount,
+      absent: absentCount,
+      complianceRate,
     };
 
     const taskSummary = {
@@ -69,6 +80,35 @@ export async function GET(
       completed: tasks.filter((t) => t.status === 'done').length,
       inProgress: tasks.filter((t) => t.status === 'in_progress').length,
       pending: tasks.filter((t) => t.status === 'todo').length,
+    };
+
+    // Filter relevant meetings & video calls
+    const employeeMeetings = allEvents.filter((e) => {
+      const isAttendee =
+        (employee.user_id && e.attendee_ids.includes(employee.user_id)) ||
+        e.attendee_ids.includes(employee.id) ||
+        (employee.user_id && e.created_by === employee.user_id);
+      const isCompanyMeeting = e.event_type === 'company_event' || (e.event_type === 'meeting' && e.attendee_ids.length === 0);
+      return (isAttendee || isCompanyMeeting) && (e.event_type === 'meeting' || Boolean(e.meeting_link));
+    }).sort((a, b) => b.start_time.localeCompare(a.start_time));
+
+    const googleMeetCount = employeeMeetings.filter(
+      (m) => m.meeting_link?.includes('meet.google.com') || m.meeting_platform === 'google_meet'
+    ).length;
+
+    const teamsCount = employeeMeetings.filter(
+      (m) => m.meeting_link?.includes('teams.') || m.meeting_platform === 'teams'
+    ).length;
+
+    const upcomingMeets = employeeMeetings.filter(
+      (m) => new Date(m.start_time).getTime() >= Date.now()
+    ).length;
+
+    const meetingSummary = {
+      totalMeets: employeeMeetings.length,
+      googleMeetCount,
+      teamsCount,
+      upcomingCount: upcomingMeets,
     };
 
     return NextResponse.json({
@@ -85,6 +125,10 @@ export async function GET(
       leaves: {
         balances: employee.leave_balances || { casual: 0, sick: 0, annual: 0, unpaid: 0 },
         history: leaves,
+      },
+      meetings: {
+        summary: meetingSummary,
+        list: employeeMeetings,
       },
       user: linkedUser
         ? {

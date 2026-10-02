@@ -50,6 +50,46 @@ const nextConfig: NextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
   devIndicators: false,
+
+  // ⚡ Performance: tree-shake heavy packages
+  experimental: {
+    optimizePackageImports: [
+      'lucide-react',
+      '@supabase/supabase-js',
+      '@supabase/ssr',
+    ],
+  },
+
+  // ⚡ Exclude large, heavy folders from Next.js's file-watching listener on Windows
+  webpack: (config, { dev, isServer }) => {
+    if (dev && !isServer) {
+      config.watchOptions = {
+        ignored: [
+          '**/node_modules/**',
+          '**/.next/**',
+          '**/backend/**',
+          '**/data/**',
+          '**/.git/**',
+          '**/tests/**',
+        ],
+      };
+    }
+    return config;
+  },
+
+  // ⚡ Node-only packages: skip bundling, use native require()
+  serverExternalPackages: [
+    'postgres',
+    'nodemailer',
+    'imap-simple',
+    'mailparser',
+    'googleapis',
+    'jsdom',
+    'dompurify',
+    'sanitize-html',
+    'web-push',
+  ],
+
   async headers() {
     return [
       {

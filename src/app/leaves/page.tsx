@@ -12,14 +12,30 @@ import {
   Award,
 } from 'lucide-react';
 import { LeaveRequest, LeaveBalances } from '@/lib/db/types';
+import { clientCache } from '@/lib/cache/clientCache';
 
 export default function LeavesPage() {
-  const [leaves, setLeaves] = useState<LeaveRequest[]>([]);
-  const [balances, setBalances] = useState<LeaveBalances>({ casual: 12, sick: 10, annual: 15, unpaid: 0 });
+  const [leaves, setLeaves] = useState<LeaveRequest[]>(() => {
+    if (typeof window !== 'undefined') {
+      return clientCache.get<LeaveRequest[]>('leaves_list') || [];
+    }
+    return [];
+  });
+  const [balances, setBalances] = useState<LeaveBalances>(() => {
+    if (typeof window !== 'undefined') {
+      return clientCache.get<LeaveBalances>('leaves_balances') || { casual: 12, sick: 10, annual: 15, unpaid: 0 };
+    }
+    return { casual: 12, sick: 10, annual: 15, unpaid: 0 };
+  });
   const [approvalQueue, setApprovalQueue] = useState<LeaveRequest[]>([]);
   const [activeTab, setActiveTab] = useState<'my_leaves' | 'approvals'>('my_leaves');
   const [canApprove, setCanApprove] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return !clientCache.get<LeaveRequest[]>('leaves_list');
+    }
+    return true;
+  });
 
   // Leave Form
   const [showApplyModal, setShowApplyModal] = useState(false);
@@ -41,7 +57,11 @@ export default function LeavesPage() {
       if (leavesRes.ok) {
         const data = await leavesRes.json();
         setLeaves(data.leaves || []);
-        if (data.balances) setBalances(data.balances);
+        clientCache.set('leaves_list', undefined, data.leaves || []);
+        if (data.balances) {
+          setBalances(data.balances);
+          clientCache.set('leaves_balances', undefined, data.balances);
+        }
       }
 
       if (userRes.ok) {
@@ -208,13 +228,14 @@ export default function LeavesPage() {
         </div>
 
         {/* Tabs for My Leaves vs Team Approvals Queue */}
-        <div className="flex items-center gap-2 border-b border-slate-200 pb-2">
+        <div className="flex items-center gap-2 border-b pb-2" style={{ borderColor: 'var(--line)' }}>
           <button
+            type="button"
             onClick={() => setActiveTab('my_leaves')}
-            className={`rounded-xl px-4 py-2 text-xs font-bold transition-all ${
+            className={`rounded-xl px-4 py-2 text-xs font-bold transition-all cursor-pointer ${
               activeTab === 'my_leaves'
-                ? 'bg-blue-50 text-blue-700 border border-blue-200 shadow-sm'
-                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                ? 'tab-btn-active border border-[var(--line)]'
+                : 'tab-btn-inactive'
             }`}
           >
             My Time Off History ({leaves.length})
@@ -222,11 +243,12 @@ export default function LeavesPage() {
 
           {canApprove && (
             <button
+              type="button"
               onClick={() => setActiveTab('approvals')}
-              className={`rounded-xl px-4 py-2 text-xs font-bold transition-all flex items-center gap-2 ${
+              className={`rounded-xl px-4 py-2 text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
                 activeTab === 'approvals'
-                  ? 'bg-purple-50 text-purple-700 border border-purple-200 shadow-sm'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                  ? 'tab-btn-active border border-[var(--line)]'
+                  : 'tab-btn-inactive'
               }`}
             >
               <span>Team Approval Queue (GL / Manager)</span>
@@ -241,8 +263,41 @@ export default function LeavesPage() {
 
         {/* Tab 1: My Leaves Table */}
         {activeTab === 'my_leaves' && (
-          <div className="rounded-3xl bg-white p-6 border border-slate-200 shadow-sm space-y-4">
-            <div className="overflow-x-auto rounded-2xl border border-slate-200">
+          <div className="rounded-3xl bg-white p-4 sm:p-6 border border-slate-200 shadow-sm space-y-4">
+            {/* Mobile Card-based View (< md) */}
+            <div className="md:hidden divide-y divide-slate-100 rounded-2xl border border-slate-200 overflow-hidden">
+              {leaves.length === 0 ? (
+                <div className="text-center py-8 text-xs text-slate-400 p-4">No leave requests submitted yet.</div>
+              ) : (
+                leaves.map((l) => (
+                  <div key={`ml-${l.id}`} className="p-4 space-y-2.5 bg-white">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-xs text-slate-900">{l.leave_type} Leave</span>
+                      {getStatusBadge(l.status)}
+                    </div>
+                    <div className="flex items-center justify-between text-xs text-slate-600 font-mono">
+                      <span>{l.start_date} → {l.end_date}</span>
+                      <span className="font-bold text-slate-900">{l.days_count} Days</span>
+                    </div>
+                    <p className="text-xs text-slate-500 italic">&ldquo;{l.reason}&rdquo;</p>
+                    <div className="flex items-center justify-between pt-2 border-t border-slate-100 text-[11px] text-slate-400">
+                      <span>Applied on {new Date(l.created_at).toLocaleDateString([], { month: 'short', day: 'numeric' })}</span>
+                      {(l.status === 'PENDING' || l.status === 'APPROVED') && (
+                        <button
+                          onClick={() => handleCancelLeave(l.id)}
+                          className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-bold text-rose-600 hover:bg-rose-50 transition-colors"
+                        >
+                          Cancel
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            {/* Desktop Table View (>= md) */}
+            <div className="hidden md:block overflow-x-auto rounded-2xl border border-slate-200">
               <table className="w-full text-left text-xs">
                 <thead className="bg-slate-50 text-slate-500 font-bold uppercase tracking-wider text-[10px] border-b border-slate-200">
                   <tr>
@@ -296,8 +351,51 @@ export default function LeavesPage() {
 
         {/* Tab 2: Team Approvals Queue */}
         {activeTab === 'approvals' && (
-          <div className="rounded-3xl bg-white p-6 border border-slate-200 shadow-sm space-y-4">
-            <div className="overflow-x-auto rounded-2xl border border-slate-200">
+          <div className="rounded-3xl bg-white p-4 sm:p-6 border border-slate-200 shadow-sm space-y-4">
+            {/* Mobile Card-based View (< md) */}
+            <div className="md:hidden divide-y divide-slate-100 rounded-2xl border border-slate-200 overflow-hidden">
+              {approvalQueue.length === 0 ? (
+                <div className="text-center py-8 text-xs text-slate-400 p-4">No pending team leave approvals.</div>
+              ) : (
+                approvalQueue.map((l) => (
+                  <div key={`ma-${l.id}`} className="p-4 space-y-2.5 bg-white">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <div className="font-bold text-xs text-slate-900">{l.employee_name}</div>
+                        <div className="text-[10px] text-slate-400 font-mono">{l.employee_code} • {l.department_name}</div>
+                      </div>
+                      {getStatusBadge(l.status)}
+                    </div>
+                    <div className="flex items-center justify-between text-xs text-slate-600 font-mono">
+                      <span>{l.start_date} → {l.end_date}</span>
+                      <span className="font-bold text-slate-900">{l.days_count} Days ({l.leave_type})</span>
+                    </div>
+                    <p className="text-xs text-slate-500 italic">&ldquo;{l.reason}&rdquo;</p>
+                    {l.status === 'PENDING' && (
+                      <div className="flex items-center gap-2 pt-2 border-t border-slate-100">
+                        <button
+                          onClick={() => handleReviewLeave(l.id, 'APPROVED')}
+                          className="flex-1 flex items-center justify-center gap-1 rounded-xl bg-emerald-600 py-2 text-xs font-bold text-white hover:bg-emerald-700 shadow-sm"
+                        >
+                          <Check className="h-4 w-4" />
+                          <span>Approve</span>
+                        </button>
+                        <button
+                          onClick={() => handleReviewLeave(l.id, 'REJECTED')}
+                          className="flex-1 flex items-center justify-center gap-1 rounded-xl bg-rose-50 border border-rose-200 py-2 text-xs font-bold text-rose-700 hover:bg-rose-100 shadow-sm"
+                        >
+                          <X className="h-4 w-4" />
+                          <span>Reject</span>
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ))
+              )}
+            </div>
+
+            {/* Desktop Table View (>= md) */}
+            <div className="hidden md:block overflow-x-auto rounded-2xl border border-slate-200">
               <table className="w-full text-left text-xs">
                 <thead className="bg-slate-50 text-slate-500 font-bold uppercase tracking-wider text-[10px] border-b border-slate-200">
                   <tr>

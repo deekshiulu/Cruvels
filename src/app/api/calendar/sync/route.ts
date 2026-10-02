@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireActiveUser, handleApiError } from '@/lib/security/authorization';
 import { dataStore } from '@/lib/db/store';
 import { checkRateLimit } from '@/lib/security/rate-limit';
-import { syncCalendarIntegration, syncSampleCalendars } from '@/lib/calendar/sync-service';
+import { syncCalendarIntegration, syncSampleCalendars, syncGoogleHolidays } from '@/lib/calendar/sync-service';
 
 export async function POST(req: NextRequest) {
   try {
@@ -24,12 +24,24 @@ export async function POST(req: NextRequest) {
       // Empty body is acceptable
     }
 
-    // Check if sample demo sync is requested
-    if (body?.sample) {
-      const result = await syncSampleCalendars(user.id);
+    // Check if dedicated Google Calendar holidays sync was requested
+    if (body?.action === 'sync_holidays') {
+      const holidayResult = await syncGoogleHolidays(user.id);
       return NextResponse.json({
         success: true,
-        message: `Sample Google Meet & Teams meetings synced! Added: ${result.added}, Updated: ${result.updated}`,
+        message: `Google Calendar Public Holidays synced! Total: ${holidayResult.totalHolidays} holidays (${holidayResult.added} added, ${holidayResult.updated} updated).`,
+        added: holidayResult.added,
+        updated: holidayResult.updated,
+        totalHolidays: holidayResult.totalHolidays,
+      });
+    }
+
+    // Check if sample demo sync is requested
+    if (body?.sample) {
+      const result = await syncSampleCalendars(user.id, undefined, { includeHolidays: true });
+      return NextResponse.json({
+        success: true,
+        message: `Google Calendar meetings & official public holidays synced! Added: ${result.added}, Updated: ${result.updated}`,
         added: result.added,
         updated: result.updated,
       });
@@ -37,13 +49,12 @@ export async function POST(req: NextRequest) {
 
     const integrations = await dataStore.getUserCalendarIntegrations(user.id);
     if (integrations.length === 0) {
-      // If user has no integrations configured yet, automatically seed sample Google & Teams meetings
-      const result = await syncSampleCalendars(user.id);
+      const holidayResult = await syncGoogleHolidays(user.id);
       return NextResponse.json({
         success: true,
-        message: `Connected sample Google Calendar & Microsoft Teams feeds! Added: ${result.added} meetings.`,
-        added: result.added,
-        updated: result.updated,
+        message: `Official public holidays synced (${holidayResult.totalHolidays} holidays). Connect your Google Calendar or Microsoft Teams iCal URL below to sync your team meetings.`,
+        added: holidayResult.added,
+        updated: holidayResult.updated,
       });
     }
 

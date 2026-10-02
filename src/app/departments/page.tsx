@@ -262,30 +262,35 @@ export default function DepartmentsPage() {
               <Building2 className="h-5 w-5" />
             </div>
             <div>
-              <h1 className="text-xl font-bold text-slate-900 tracking-tight">Organization & Squads</h1>
-              <p className="text-xs text-slate-500">Manage departments and group hierarchies with Group Leaders (GL)</p>
+              <h1 className="text-xl font-bold tracking-tight" style={{ color: 'var(--ink)' }}>Organization &amp; Squads</h1>
+              <p className="text-xs" style={{ color: 'var(--muted)' }}>Manage departments and group hierarchies with Group Leaders (GL)</p>
             </div>
           </div>
 
           <div className="flex items-center gap-3">
-            <div className="flex rounded-2xl bg-slate-100 p-1 border border-slate-200 text-xs font-bold">
+            <div
+              className="flex rounded-2xl p-1 border text-xs font-bold"
+              style={{ background: 'var(--surface-2)', borderColor: 'var(--line)' }}
+            >
               <button
+                type="button"
                 onClick={() => setActiveTab('departments')}
-                className={`flex items-center gap-1.5 rounded-xl px-3 py-1.5 transition-all ${
-                  activeTab === 'departments' ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-600 hover:text-slate-900'
+                className={`flex items-center gap-1.5 rounded-xl px-3 py-1.5 transition-all cursor-pointer ${
+                  activeTab === 'departments' ? 'tab-btn-active' : 'tab-btn-inactive'
                 }`}
               >
                 <Building2 className="h-3.5 w-3.5" />
                 <span>Departments ({departments.length})</span>
               </button>
               <button
+                type="button"
                 onClick={() => setActiveTab('groups')}
-                className={`flex items-center gap-1.5 rounded-xl px-3 py-1.5 transition-all ${
-                  activeTab === 'groups' ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-600 hover:text-slate-900'
+                className={`flex items-center gap-1.5 rounded-xl px-3 py-1.5 transition-all cursor-pointer ${
+                  activeTab === 'groups' ? 'tab-btn-active' : 'tab-btn-inactive'
                 }`}
               >
                 <Layers className="h-3.5 w-3.5" />
-                <span>Squads & GLs ({groups.length})</span>
+                <span>Squads &amp; GLs ({groups.length})</span>
               </button>
             </div>
 

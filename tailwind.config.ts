@@ -10,8 +10,24 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
+        // Cruvels Workplace OS — design tokens (mirrors CSS custom properties)
+        cruvels: {
+          ink:     '#0A192F',
+          paper:   '#F0F4F8',
+          surface: '#FFFFFF',
+          teal:    '#0A369D',
+          amber:   '#D97706',
+          line:    '#D0DCE8',
+          muted:   '#5C768D',
+          // Dark-mode surfaces
+          'dark-bg':      '#070E1A',
+          'dark-surface': '#0D192B',
+          'dark-line':    '#1A2F4C',
+          'dark-muted':   '#7E95AD',
+        },
+        // Keep brand green for leave/status indicators
         brand: {
-          50: '#f0fdf4',
+          50:  '#f0fdf4',
           100: '#dcfce7',
           200: '#bbf7d0',
           300: '#86efac',
@@ -23,33 +39,17 @@ const config: Config = {
           900: '#14532d',
           950: '#052e16',
         },
-        cruvels: {
-          dark: '#0B0F17',
-          card: '#131A29',
-          cardBorder: '#1F293D',
-          hover: '#1E293B',
-          accent: '#3B82F6',
-          accentHover: '#2563EB',
-          emerald: '#10B981',
-          gold: '#F59E0B',
-          danger: '#EF4444',
-          subtle: '#64748B',
-          text: '#F8FAFC',
-          muted: '#94A3B8'
-        }
       },
       fontFamily: {
-        sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
+        bricolage: ['"Bricolage Grotesque"', 'system-ui', 'sans-serif'],
+        archivo:   ['Archivo', 'system-ui', 'sans-serif'],
+        sans:      ['Archivo', 'system-ui', '-apple-system', 'sans-serif'],
       },
       boxShadow: {
-        'glass': '0 8px 32px 0 rgba(0, 0, 0, 0.37)',
-        'glow': '0 0 20px rgba(59, 130, 246, 0.25)',
-        'glow-emerald': '0 0 20px rgba(16, 185, 129, 0.25)',
+        // Rule-based depth — no glow soup
+        'rule': '0 1px 0 var(--line)',
+        'panel': '0 2px 8px -2px rgba(18,32,42,0.08)',
       },
-      backgroundImage: {
-        'gradient-radial': 'radial-gradient(var(--tw-gradient-stops))',
-        'subtle-grid': 'linear-gradient(to right, #1F293D15 1px, transparent 1px), linear-gradient(to bottom, #1F293D15 1px, transparent 1px)',
-      }
     },
   },
   plugins: [],

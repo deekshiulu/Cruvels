@@ -23,6 +23,7 @@ const ALLOWED_CSS_STYLES: { [tag: string]: { [prop: string]: RegExp[] } } = {
   '*': {
     // Whitelist safe typography & box properties only
     'color': [/^#(0x)?[0-9a-f]+$/i, /^rgb\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})\s*\)$/i, /^[a-z]+$/i],
+    'background': [/^#(0x)?[0-9a-f]+$/i, /^rgb\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})\s*\)$/i, /^[a-z]+$/i, /^linear-gradient\(.+\)$/i],
     'background-color': [/^#(0x)?[0-9a-f]+$/i, /^rgb\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})\s*\)$/i, /^[a-z]+$/i],
     'text-align': [/^(left|right|center|justify)$/i],
     'font-size': [/^\d+(?:px|em|rem|%)$/i],
@@ -40,6 +41,8 @@ const ALLOWED_CSS_STYLES: { [tag: string]: { [prop: string]: RegExp[] } } = {
     'padding-left': [/^[0-9.pxemrem%]+$/i],
     'padding-right': [/^[0-9.pxemrem%]+$/i],
     'border': [/^[0-9a-zA-Z\s.#px]+$/i],
+    'border-bottom': [/^[0-9a-zA-Z\s.#px]+$/i],
+    'border-top': [/^[0-9a-zA-Z\s.#px]+$/i],
     'border-radius': [/^[0-9.pxemrem%]+$/i],
     'width': [/^[0-9.pxemrem%]+$/i],
     'max-width': [/^[0-9.pxemrem%]+$/i],

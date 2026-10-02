@@ -15,8 +15,14 @@ import {
   Sparkles,
   Save,
   AtSign,
+  Eye,
+  EyeOff,
+  Check,
+  X,
 } from 'lucide-react';
 import { AuthSessionUser, Employee } from '@/lib/db/types';
+import { clearTabSession } from '@/lib/auth/client-session';
+import { clientCache } from '@/lib/cache/clientCache';
 
 function ProfileContent() {
   const searchParams = useSearchParams();
@@ -34,6 +40,11 @@ function ProfileContent() {
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+
+  // Password visibility toggles
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   const [savingProfile, setSavingProfile] = useState(false);
   const [updatingPassword, setUpdatingPassword] = useState(false);
@@ -124,14 +135,14 @@ function ProfileContent() {
 
       const data = await res.json();
       if (res.ok && data.success) {
-        setNotification('Password changed successfully! Your session is renewed.');
-        setCurrentPassword('');
-        setNewPassword('');
-        setConfirmPassword('');
         if (forcePassword) {
-          window.location.href = user?.role === 'admin' ? '/admin' : '/dashboard';
+          clearTabSession();
+          clientCache.clear();
+          await fetch('/api/auth/logout', { method: 'POST' }).catch(() => {});
+          window.location.href = '/login?message=password_updated';
           return;
         }
+        setNotification('Password changed successfully! Your session is renewed.');
         setTimeout(() => setNotification(null), 4000);
       } else {
         setError(data.error || 'Failed to update password.');
@@ -158,11 +169,14 @@ function ProfileContent() {
         </div>
 
         {forcePassword && (
-          <div className="flex items-center gap-2.5 rounded-2xl border border-amber-200 bg-amber-50 p-3.5 text-xs text-amber-900">
-            <AlertCircle className="h-4 w-4 text-amber-600 shrink-0" />
-            <span className="font-semibold">
-              You must set a unique password before using the portal. The shared seed password is not allowed in production.
-            </span>
+          <div className="flex items-center gap-3.5 rounded-2xl border border-amber-300 bg-amber-50 p-4 text-xs text-amber-900 shadow-sm">
+            <Shield className="h-6 w-6 text-amber-600 shrink-0" />
+            <div>
+              <div className="font-bold text-sm">Password Change Required to Access Account</div>
+              <div className="mt-0.5 text-slate-700">
+                Your administrator has reset your password. You must set a new personal password before you can access the Cruvels workspace. Once updated, you will be redirected to log in with your new password.
+              </div>
+            </div>
           </div>
         )}
 
@@ -231,7 +245,8 @@ function ProfileContent() {
           </div>
         </div>
 
-        {/* Profile Customization Form */}
+        {/* Profile Customization Form (Hidden during forced password setup) */}
+        {!forcePassword && (
         <div className="rounded-3xl bg-white p-6 border border-slate-200 shadow-sm space-y-5">
           <div className="flex items-center gap-2 border-b border-slate-100 pb-3">
             <Sparkles className="h-4 w-4 text-blue-600" />
@@ -291,6 +306,7 @@ function ProfileContent() {
             </button>
           </form>
         </div>
+        )}
 
         {/* Change Password Card */}
         <div className="rounded-3xl bg-white p-6 border border-slate-200 shadow-sm space-y-4">
@@ -299,41 +315,113 @@ function ProfileContent() {
             <h3 className="text-sm font-bold text-slate-900">Update Account Password</h3>
           </div>
 
-          <form onSubmit={handleChangePassword} className="space-y-3.5 max-w-md text-xs">
+          <form onSubmit={handleChangePassword} className="space-y-4 max-w-md text-xs">
             <div>
               <label className="block text-slate-600 font-semibold mb-1">Current Password</label>
-              <input
-                type="password"
-                required
-                value={currentPassword}
-                onChange={(e) => setCurrentPassword(e.target.value)}
-                placeholder="••••••••"
-                className="w-full rounded-xl border border-slate-200 bg-slate-50 p-2.5 text-slate-900 focus:bg-white focus:border-blue-500 focus:outline-none"
-              />
+              <div className="relative">
+                <input
+                  type={showCurrentPassword ? 'text' : 'password'}
+                  required
+                  value={currentPassword}
+                  onChange={(e) => setCurrentPassword(e.target.value)}
+                  placeholder="Enter current password"
+                  className="w-full rounded-xl border border-slate-200 bg-slate-50 p-2.5 pr-10 text-slate-900 focus:bg-white focus:border-blue-500 focus:outline-none transition-all"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowCurrentPassword(!showCurrentPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 focus:outline-none"
+                  tabIndex={-1}
+                  aria-label={showCurrentPassword ? 'Hide current password' : 'Show current password'}
+                >
+                  {showCurrentPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
             </div>
 
             <div>
-              <label className="block text-slate-600 font-semibold mb-1">New Password (min 8 chars)</label>
-              <input
-                type="password"
-                required
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-                placeholder="••••••••"
-                className="w-full rounded-xl border border-slate-200 bg-slate-50 p-2.5 text-slate-900 focus:bg-white focus:border-blue-500 focus:outline-none"
-              />
+              <label className="block text-slate-600 font-semibold mb-1">New Password (min 10 chars)</label>
+              <div className="relative">
+                <input
+                  type={showNewPassword ? 'text' : 'password'}
+                  required
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  placeholder="Enter new strong password"
+                  className="w-full rounded-xl border border-slate-200 bg-slate-50 p-2.5 pr-10 text-slate-900 focus:bg-white focus:border-blue-500 focus:outline-none transition-all"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowNewPassword(!showNewPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 focus:outline-none"
+                  tabIndex={-1}
+                  aria-label={showNewPassword ? 'Hide new password' : 'Show new password'}
+                >
+                  {showNewPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+
+              {/* Password requirement badges */}
+              {newPassword.length > 0 && (
+                <div className="mt-2 grid grid-cols-2 gap-1.5 text-[11px] p-2.5 rounded-xl bg-slate-50 border border-slate-100">
+                  <span className={`flex items-center gap-1 ${newPassword.length >= 10 ? 'text-emerald-600 font-medium' : 'text-slate-400'}`}>
+                    {newPassword.length >= 10 ? <Check className="h-3 w-3" /> : <span className="h-1.5 w-1.5 rounded-full bg-slate-300 ml-1 mr-0.5" />}
+                    10+ characters
+                  </span>
+                  <span className={`flex items-center gap-1 ${/[A-Z]/.test(newPassword) && /[a-z]/.test(newPassword) ? 'text-emerald-600 font-medium' : 'text-slate-400'}`}>
+                    {/[A-Z]/.test(newPassword) && /[a-z]/.test(newPassword) ? <Check className="h-3 w-3" /> : <span className="h-1.5 w-1.5 rounded-full bg-slate-300 ml-1 mr-0.5" />}
+                    Upper & lowercase
+                  </span>
+                  <span className={`flex items-center gap-1 ${/[0-9]/.test(newPassword) ? 'text-emerald-600 font-medium' : 'text-slate-400'}`}>
+                    {/[0-9]/.test(newPassword) ? <Check className="h-3 w-3" /> : <span className="h-1.5 w-1.5 rounded-full bg-slate-300 ml-1 mr-0.5" />}
+                    At least 1 number
+                  </span>
+                  <span className={`flex items-center gap-1 ${newPassword.toLowerCase() !== 'password123!' && newPassword.toLowerCase() !== 'password123' ? 'text-emerald-600 font-medium' : 'text-rose-500 font-medium'}`}>
+                    {newPassword.toLowerCase() !== 'password123!' && newPassword.toLowerCase() !== 'password123' ? <Check className="h-3 w-3" /> : <X className="h-3 w-3" />}
+                    Not default password
+                  </span>
+                </div>
+              )}
             </div>
 
             <div>
               <label className="block text-slate-600 font-semibold mb-1">Confirm New Password</label>
-              <input
-                type="password"
-                required
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                placeholder="••••••••"
-                className="w-full rounded-xl border border-slate-200 bg-slate-50 p-2.5 text-slate-900 focus:bg-white focus:border-blue-500 focus:outline-none"
-              />
+              <div className="relative">
+                <input
+                  type={showConfirmPassword ? 'text' : 'password'}
+                  required
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  placeholder="Re-enter new password to verify"
+                  className={`w-full rounded-xl border p-2.5 pr-10 text-slate-900 focus:bg-white focus:outline-none transition-all ${
+                    confirmPassword.length > 0 && newPassword !== confirmPassword
+                      ? 'border-rose-300 bg-rose-50/30 focus:border-rose-500'
+                      : newPassword.length > 0 && confirmPassword.length > 0 && newPassword === confirmPassword
+                      ? 'border-emerald-300 bg-emerald-50/20 focus:border-emerald-500'
+                      : 'border-slate-200 bg-slate-50 focus:border-blue-500'
+                  }`}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 focus:outline-none"
+                  tabIndex={-1}
+                  aria-label={showConfirmPassword ? 'Hide confirm password' : 'Show confirm password'}
+                >
+                  {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+
+              {confirmPassword.length > 0 && newPassword !== confirmPassword && (
+                <p className="mt-1 text-[11px] text-rose-600 flex items-center gap-1 font-medium">
+                  <X className="h-3 w-3" /> Passwords do not match
+                </p>
+              )}
+              {newPassword.length > 0 && confirmPassword.length > 0 && newPassword === confirmPassword && (
+                <p className="mt-1 text-[11px] text-emerald-600 flex items-center gap-1 font-medium">
+                  <Check className="h-3 w-3" /> Passwords match
+                </p>
+              )}
             </div>
 
             <button
@@ -342,7 +430,13 @@ function ProfileContent() {
               className="glow-btn-primary flex items-center gap-2 rounded-xl px-5 py-2.5 text-xs font-bold text-white shadow-sm disabled:opacity-50"
             >
               <Key className="h-4 w-4" />
-              <span>{updatingPassword ? 'Updating Password...' : 'Change Password'}</span>
+              <span>
+                {updatingPassword
+                  ? 'Updating Password...'
+                  : forcePassword
+                  ? 'Update Password & Return to Login'
+                  : 'Change Password'}
+              </span>
             </button>
           </form>
         </div>

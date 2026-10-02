@@ -18,6 +18,8 @@ import {
 } from 'lucide-react';
 import { AuthSessionUser } from '@/lib/db/types';
 import { clientCache } from '@/lib/cache/clientCache';
+import AppShell from '@/components/layout/AppShell';
+import MailNavRail from '@/components/mail/MailNavRail';
 
 interface StagedAttachment {
   filename: string;
@@ -321,8 +323,10 @@ export default function ComposePage() {
   };
 
   return (
-    <div className="flex h-full flex-col space-y-4 max-w-4xl mx-auto">
-      {/* Top Header */}
+    <AppShell>
+      <div className="space-y-6 max-w-5xl mx-auto pb-12">
+        <MailNavRail currentFolder="compose" />
+        {/* Top Header */}
       <div className="flex items-center justify-between">
         <button
           onClick={() => router.back()}
@@ -660,6 +664,7 @@ export default function ComposePage() {
           </div>
         </div>
       </form>
-    </div>
+      </div>
+    </AppShell>
   );
 }

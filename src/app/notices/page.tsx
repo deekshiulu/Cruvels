@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
+import Link from 'next/link';
 import AppShell from '@/components/layout/AppShell';
 import {
   Megaphone,
@@ -12,13 +13,32 @@ import {
   X,
   Trash2,
   Edit2,
+  ShieldCheck,
+  Clock,
 } from 'lucide-react';
 import { Notice, AuthSessionUser } from '@/lib/db/types';
+import { AcknowledgementAction } from '@/components/common/AcknowledgementAction';
+import { clientCache } from '@/lib/cache/clientCache';
 
 export default function NoticeBoardPage() {
-  const [notices, setNotices] = useState<Notice[]>([]);
-  const [currentUser, setCurrentUser] = useState<AuthSessionUser | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [notices, setNotices] = useState<Notice[]>(() => {
+    if (typeof window !== 'undefined') {
+      return clientCache.get<Notice[]>('notices_list') || [];
+    }
+    return [];
+  });
+  const [currentUser, setCurrentUser] = useState<AuthSessionUser | null>(() => {
+    if (typeof window !== 'undefined') {
+      return clientCache.get<AuthSessionUser>('session_user') || null;
+    }
+    return null;
+  });
+  const [loading, setLoading] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return !clientCache.get<Notice[]>('notices_list');
+    }
+    return true;
+  });
   const [categoryFilter, setCategoryFilter] = useState('');
   const [search, setSearch] = useState('');
 
@@ -29,6 +49,9 @@ export default function NoticeBoardPage() {
   const [content, setContent] = useState('');
   const [category, setCategory] = useState<'General' | 'Urgent' | 'Event' | 'Policy' | 'Engineering'>('General');
   const [isPinned, setIsPinned] = useState(false);
+  const [requiresAcknowledgement, setRequiresAcknowledgement] = useState(false);
+  const [acknowledgementDueDate, setAcknowledgementDueDate] = useState('');
+  const [targetAudience, setTargetAudience] = useState<'all' | 'interns' | 'employees' | 'engineering' | 'squad'>('all');
   const [submitting, setSubmitting] = useState(false);
   const [notification, setNotification] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -47,6 +70,7 @@ export default function NoticeBoardPage() {
       if (noticesRes.ok) {
         const data = await noticesRes.json();
         setNotices(data.notices || []);
+        clientCache.set('notices_list', undefined, data.notices || []);
       }
     } finally {
       setLoading(false);
@@ -65,6 +89,9 @@ export default function NoticeBoardPage() {
     setContent('');
     setCategory('General');
     setIsPinned(false);
+    setRequiresAcknowledgement(false);
+    setAcknowledgementDueDate('');
+    setTargetAudience('all');
     setError(null);
     setShowModal(true);
   };
@@ -75,6 +102,9 @@ export default function NoticeBoardPage() {
     setContent(notice.content);
     setCategory(notice.category);
     setIsPinned(notice.is_pinned);
+    setRequiresAcknowledgement(Boolean(notice.requires_acknowledgement));
+    setAcknowledgementDueDate(notice.acknowledgement_due_date || '');
+    setTargetAudience(notice.target_audience || 'all');
     setError(null);
     setShowModal(true);
   };
@@ -97,6 +127,9 @@ export default function NoticeBoardPage() {
           category,
           isPinned,
           is_pinned: isPinned,
+          requiresAcknowledgement,
+          acknowledgementDueDate: acknowledgementDueDate || undefined,
+          targetAudience,
         }),
       });
 
@@ -244,6 +277,19 @@ export default function NoticeBoardPage() {
                       {notice.category}
                     </span>
                     <h3 className="text-sm font-bold text-slate-900">{notice.title}</h3>
+
+                    {notice.requires_acknowledgement && (notice as any).acknowledgementSummary && isAdminOrManager && (
+                      <Link
+                        href="/admin/acknowledgements"
+                        className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200 hover:bg-indigo-100 transition"
+                        title="View recipient audit roster"
+                      >
+                        <ShieldCheck className="w-3 h-3 text-indigo-600" />
+                        <span>
+                          {(notice as any).acknowledgementSummary.acknowledgedCount}/{(notice as any).acknowledgementSummary.totalRecipients} Ack ({(notice as any).acknowledgementSummary.complianceRate}%)
+                        </span>
+                      </Link>
+                    )}
                   </div>
 
                   <div className="flex items-center gap-2">
@@ -273,8 +319,31 @@ export default function NoticeBoardPage() {
 
                 <p className="text-xs text-slate-700 leading-relaxed whitespace-pre-wrap">{notice.content}</p>
 
-                <div className="pt-2 border-t border-slate-100 text-[11px] text-slate-400 font-medium">
-                  Author: <span className="text-slate-700 font-semibold">{notice.author_name}</span>
+                {/* Universal Acknowledgement Action Box (§ 5.2, § 8) */}
+                {notice.requires_acknowledgement && (
+                  <div className="pt-2">
+                    <AcknowledgementAction
+                      itemType="notice"
+                      itemId={notice.id}
+                      itemTitle={notice.title}
+                      dueAt={notice.acknowledgement_due_date}
+                      initialStatus={(notice as any).userAcknowledgement?.status}
+                      initialAcknowledgedAt={(notice as any).userAcknowledgement?.acknowledged_at}
+                      onAcknowledged={fetchNotices}
+                    />
+                  </div>
+                )}
+
+                <div className="pt-2 border-t border-slate-100 text-[11px] text-slate-400 font-medium flex items-center justify-between">
+                  <div>
+                    Author: <span className="text-slate-700 font-semibold">{notice.author_name}</span>
+                  </div>
+                  {notice.requires_acknowledgement && notice.acknowledgement_due_date && (
+                    <div className="text-[10px] text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded font-medium flex items-center gap-1">
+                      <Clock className="w-3 h-3" />
+                      <span>Acknowledgement Due: {new Date(notice.acknowledgement_due_date).toLocaleDateString('en-GB')}</span>
+                    </div>
+                  )}
                 </div>
               </div>
             ))
@@ -353,6 +422,53 @@ export default function NoticeBoardPage() {
                     placeholder="Type notice message..."
                     className="w-full rounded-xl border border-slate-200 bg-slate-50 p-2.5 text-slate-900 focus:bg-white focus:border-blue-500 focus:outline-none leading-relaxed"
                   />
+                </div>
+
+                {/* Mandatory Acknowledgement Settings (§ 8) */}
+                <div className="p-3 rounded-xl border border-indigo-100 bg-indigo-50/40 space-y-2.5">
+                  <label className="flex items-center gap-2 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={requiresAcknowledgement}
+                      onChange={(e) => setRequiresAcknowledgement(e.target.checked)}
+                      className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 border-slate-300"
+                    />
+                    <span className="font-semibold text-indigo-950 text-xs">
+                      Require Mandatory Acknowledgement (§ 8)
+                    </span>
+                  </label>
+
+                  {requiresAcknowledgement && (
+                    <div className="space-y-2 pt-1 border-t border-indigo-200/50">
+                      <div>
+                        <label className="block text-slate-600 font-medium mb-1 text-[11px]">
+                          Target Audience
+                        </label>
+                        <select
+                          value={targetAudience}
+                          onChange={(e) => setTargetAudience(e.target.value as any)}
+                          className="w-full rounded-lg border border-slate-200 bg-white p-2 text-slate-900 focus:border-indigo-500 focus:outline-none text-xs"
+                        >
+                          <option value="all">Whole Company / All Active Members</option>
+                          <option value="interns">All Interns Only</option>
+                          <option value="employees">Core Employees & Staff</option>
+                          <option value="engineering">Engineering & Tech Division</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-slate-600 font-medium mb-1 text-[11px]">
+                          Acknowledgement Deadline (Optional)
+                        </label>
+                        <input
+                          type="date"
+                          value={acknowledgementDueDate}
+                          onChange={(e) => setAcknowledgementDueDate(e.target.value)}
+                          className="w-full rounded-lg border border-slate-200 bg-white p-2 text-slate-900 focus:border-indigo-500 focus:outline-none text-xs"
+                        />
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">

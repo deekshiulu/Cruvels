@@ -7,10 +7,12 @@ import { logAuditEvent } from '@/lib/audit/logger';
 const UpdateTaskSchema = z.object({
   title: z.string().min(2).max(150).optional(),
   description: z.string().max(1000).optional(),
-  status: z.enum(['todo', 'in_progress', 'in_review', 'done']).optional(),
+  status: z.enum(['todo', 'in_progress', 'blocked', 'in_review', 'done']).optional(),
   priority: z.enum(['low', 'medium', 'high', 'urgent']).optional(),
   due_date: z.string().min(10).optional(),
   assigned_to_id: z.string().min(1).optional(),
+  assigned_poc_id: z.string().optional(),
+  requires_acknowledgement: z.boolean().optional(),
 });
 
 export async function GET(
@@ -31,6 +33,45 @@ export async function GET(
     return NextResponse.json({ success: true, task });
   } catch (err) {
     return handleApiError(err);
+  }
+}
+
+async function notifyPocAndCreator(task: any, oldStatus: string, newStatus: string, actorName: string) {
+  if (oldStatus === newStatus) return;
+
+  const recipients = new Set<string>();
+  if (task.created_by_id) recipients.add(task.created_by_id);
+
+  if (task.assigned_poc_id) {
+    const pocEmp = await dataStore.getEmployeeById(task.assigned_poc_id);
+    if (pocEmp?.user_id) recipients.add(pocEmp.user_id);
+    const pocUser = await dataStore.getUserById(task.assigned_poc_id);
+    if (pocUser) recipients.add(pocUser.id);
+  }
+
+  const label =
+    newStatus === 'blocked'
+      ? 'Task Blocked'
+      : newStatus === 'in_review'
+      ? 'Task Submitted for Review'
+      : newStatus === 'done'
+      ? 'Task Completed'
+      : `Task Status Updated to ${newStatus}`;
+
+  const message = `${actorName} marked "${task.title}" as ${newStatus.replace('_', ' ').toUpperCase()}.`;
+
+  for (const recipientId of recipients) {
+    await dataStore.createNotification({
+      user_id: recipientId,
+      type: 'task',
+      title: label,
+      message,
+      link_url: '/tasks',
+      category: newStatus === 'blocked' ? 'action_required' : 'task',
+      state: newStatus === 'blocked' ? 'action_required' : 'unread',
+      action_label: 'View Task',
+      action_url: '/tasks',
+    });
   }
 }
 
@@ -63,6 +104,9 @@ export async function PUT(
         return NextResponse.json({ error: 'Assignees can only update task status.', success: false }, { status: 403 });
       }
       const updated = await dataStore.updateTask(id, statusOnly, { id: user.id, name: user.name });
+      if (updated && parsed.data.status !== existing.status) {
+        await notifyPocAndCreator(updated, existing.status, parsed.data.status, user.name);
+      }
       return NextResponse.json({ success: true, task: updated });
     }
 
@@ -91,17 +135,32 @@ export async function PUT(
       assignedToName = assignee.name;
     }
 
+    let assignedPocName: string | undefined = undefined;
+    if (parsed.data.assigned_poc_id) {
+      const pocEmp = await dataStore.getEmployeeById(parsed.data.assigned_poc_id);
+      if (pocEmp) assignedPocName = pocEmp.name;
+      else {
+        const pocUser = await dataStore.getUserById(parsed.data.assigned_poc_id);
+        if (pocUser) assignedPocName = pocUser.name;
+      }
+    }
+
     const updated = await dataStore.updateTask(
       id,
       {
         ...parsed.data,
         ...(assignedToName ? { assigned_to_name: assignedToName } : {}),
+        ...(assignedPocName ? { assigned_poc_name: assignedPocName } : {}),
       },
       { id: user.id, name: user.name }
     );
 
     if (!updated) {
       return NextResponse.json({ error: 'Task not found.', success: false }, { status: 404 });
+    }
+
+    if (parsed.data.status && parsed.data.status !== existing.status) {
+      await notifyPocAndCreator(updated, existing.status, parsed.data.status, user.name);
     }
 
     await logAuditEvent({

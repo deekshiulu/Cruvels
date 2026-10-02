@@ -4,7 +4,10 @@ import { AUTH_COOKIE_NAME, verifySignedSessionJwt } from '@/lib/auth/jwt-edge';
 const PUBLIC_PATHS = [
   '/login',
   '/api/auth/login',
+  '/api/auth/forgot-password',
   '/api/health',
+  '/api/dev/warmup',
+  '/api/dev/reset',
   '/sw.js',
   '/manifest.webmanifest',
   '/favicon.ico',
@@ -21,7 +24,9 @@ function isPublicPath(pathname: string): boolean {
 
 function isCronSync(req: NextRequest, pathname: string): boolean {
   const cronSecret = process.env.CRON_SECRET;
-  if (!cronSecret || pathname !== '/api/mail/sync') return false;
+  if (!cronSecret) return false;
+  const validCronPaths = ['/api/mail/sync', '/api/compliance/check'];
+  if (!validCronPaths.includes(pathname)) return false;
   const auth = req.headers.get('authorization') || '';
   return auth === `Bearer ${cronSecret}`;
 }
@@ -42,6 +47,14 @@ function unauthenticated(req: NextRequest): NextResponse {
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
   if (isPublicPath(pathname)) {
+    return NextResponse.next();
+  }
+
+  // Allow background route pre-compilation during development
+  if (
+    process.env.NODE_ENV !== 'production' &&
+    (req.headers.get('x-cruvels-warmup') === '1' || req.nextUrl.searchParams.get('_warmup') === '1')
+  ) {
     return NextResponse.next();
   }
 
@@ -69,13 +82,23 @@ export async function middleware(req: NextRequest) {
     return res;
   }
 
-  // Enforce mandatory password update before accessing other application pages
+  // Enforce mandatory password update before accessing other application pages and protected APIs
   if (payload.user?.mustChangePassword) {
-    if (
-      !pathname.startsWith('/profile') &&
-      !pathname.startsWith('/api/') &&
-      !pathname.startsWith('/_next')
-    ) {
+    const isAllowed =
+      pathname.startsWith('/profile') ||
+      pathname === '/api/profile' ||
+      pathname === '/api/auth/logout' ||
+      pathname === '/api/auth/me' ||
+      pathname.startsWith('/api/notifications/stream') ||
+      pathname.startsWith('/_next');
+
+    if (!isAllowed) {
+      if (pathname.startsWith('/api/')) {
+        return NextResponse.json(
+          { error: 'Password change required before accessing portal resources.', mustChangePassword: true, success: false },
+          { status: 403 }
+        );
+      }
       const profileUrl = req.nextUrl.clone();
       profileUrl.pathname = '/profile';
       profileUrl.searchParams.set('force', 'password');

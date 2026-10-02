@@ -74,14 +74,16 @@ Open [http://localhost:3005](http://localhost:3005) in your browser.
 
 ## 👥 Default Test Personas (Pre-seeded)
 
-| Role | Username | Assigned Alias | Default Password | Redirect Destination |
-|---|---|---|---|---|
-| **Admin** | `admin` | `admin@cruvels.com` | `Password123!` | `/admin` |
-| **Intern A** | `rahul` | `rahul@cruvels.com` | `Password123!` | `/dashboard` |
-| **Intern B** | `priya` | `priya@cruvels.com` | `Password123!` | `/dashboard` |
+| Role | Name | Username | Assigned Alias | Password | Direct Dashboard / Destination |
+|---|---|---|---|---|---|
+| **Admin** | Admin Supervisor | `admin` | `admin@cruvels.com` | `Admin@1234` | `/admin` or `/dashboard` |
+| **Intern** | Rahul Sharma | `rahul` | `rahul@cruvels.com` | `Intern@1234` | `/dashboard` (Engineering & Technology) |
+| **Intern** | Priya Patel | `priya` | `priya@cruvels.com` | `Intern@1234` | `/dashboard` (Product & Design) |
+| **Intern** | Ananya Reddy | `ananya` | `ananya@cruvels.com` | `Intern@1234` | `/dashboard` (Engineering & Technology) |
+| **Intern** | Aravind Kumar | `aravind` | `aravind@cruvels.com` | `Intern@1234` | `/dashboard` (Sales & Growth) |
 
 > [!NOTE]
-> All default accounts require setting a new password upon first login to enforce security hygiene before accessing dashboard modules.
+> All accounts above can sign in directly into the portal. The intern accounts come pre-configured with active assignments on the Kanban board, attendance records, and orientation communications in their mailboxes.
 
 ---
 

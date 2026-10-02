@@ -62,10 +62,17 @@ export default function RootPage() {
   }, [router]);
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-[#F8FAFC]">
-      <div className="flex flex-col items-center gap-3">
-        <div className="h-9 w-9 animate-spin rounded-full border-3 border-blue-600 border-t-transparent"></div>
-        <p className="text-xs text-slate-500 font-medium tracking-wide">Loading Cruvels Internal Portal...</p>
+    <div className="flex min-h-screen items-center justify-center" style={{ background: 'var(--paper)', color: 'var(--ink)' }}>
+      <div className="flex flex-col items-center gap-4">
+        <div className="relative flex h-16 w-16 items-center justify-center rounded-2xl p-2.5 shadow-sm" style={{ background: 'var(--surface)', border: '1px solid var(--line)' }}>
+          <img src="/cruvels-logo-transparent.png" alt="Cruvels Logo" className="h-12 w-12 object-contain animate-pulse" />
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="h-4 w-4 animate-spin rounded-full border-2 border-[var(--teal)] border-t-transparent" />
+          <p className="text-xs font-semibold" style={{ color: 'var(--muted)', fontFamily: 'Archivo, sans-serif' }}>
+            Loading Cruvels Workplace OS...
+          </p>
+        </div>
       </div>
     </div>
   );

@@ -10,7 +10,7 @@ interface CacheEntry<T> {
 
 class ClientCacheManager {
   private memoryStore: Map<string, CacheEntry<any>> = new Map();
-  private maxAgeMs = 60 * 1000;
+  private maxAgeMs = 30 * 60 * 1000;
   private userScope = '';
 
   public setUserScope(userId: string) {
@@ -29,7 +29,7 @@ class ClientCacheManager {
   public get<T>(prefix: string, params?: Record<string, any>): T | null {
     const key = this.getKey(prefix, params);
     const entry = this.memoryStore.get(key);
-    if (entry && Date.now() - entry.timestamp < this.maxAgeMs) {
+    if (entry && entry.data !== undefined) {
       return entry.data as T;
     }
 
@@ -38,7 +38,7 @@ class ClientCacheManager {
         const raw = sessionStorage.getItem(`cruvels_cache_${key}`);
         if (raw) {
           const parsed = JSON.parse(raw);
-          if (parsed && Date.now() - parsed.timestamp < this.maxAgeMs) {
+          if (parsed && parsed.data !== undefined) {
             this.memoryStore.set(key, parsed);
             return parsed.data as T;
           }
@@ -47,6 +47,15 @@ class ClientCacheManager {
     }
 
     return null;
+  }
+
+  public isFresh(prefix: string, params?: Record<string, any>, freshWindowMs = 30000): boolean {
+    const key = this.getKey(prefix, params);
+    const entry = this.memoryStore.get(key);
+    if (entry && Date.now() - entry.timestamp < freshWindowMs) {
+      return true;
+    }
+    return false;
   }
 
   public set<T>(prefix: string, params: Record<string, any> | undefined, data: T): void {
@@ -89,6 +98,10 @@ class ClientCacheManager {
         }
       });
     }
+  }
+
+  public clear(): void {
+    this.invalidate();
   }
 }
 

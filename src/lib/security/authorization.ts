@@ -128,12 +128,14 @@ export type TaskAccessLevel = 'none' | 'read' | 'status' | 'full';
 
 export async function getTaskAccessLevel(
   user: AuthSessionUser,
-  task: { created_by_id: string; assigned_to_id: string }
+  task: { created_by_id: string; assigned_to_id: string; assigned_poc_id?: string }
 ): Promise<TaskAccessLevel> {
-  if (user.role === 'admin') return 'full';
+  if (user.role === 'admin' || user.role === 'manager') return 'full';
   if (task.created_by_id === user.id) return 'full';
+  if (task.assigned_poc_id && task.assigned_poc_id === user.id) return 'full';
   const emp = await dataStore.getEmployeeByUserId(user.id);
   if (emp && task.assigned_to_id === emp.id) return 'status';
+  if (emp && task.assigned_poc_id && task.assigned_poc_id === emp.id) return 'full';
   return 'none';
 }
 

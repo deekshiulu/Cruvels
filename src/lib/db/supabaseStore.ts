@@ -14,6 +14,10 @@ import {
   CreateEmployeeInput,
   AttendanceRecord,
   AttendanceStatus,
+  AttendanceRuleConfig,
+  DEFAULT_ATTENDANCE_RULES,
+  AttendanceCorrectionRequest,
+  AttendanceCorrectionStatus,
   LeaveRequest,
   LeaveStatus,
   LeaveBalances,
@@ -22,8 +26,23 @@ import {
   UserCalendarIntegration,
   Note,
   TaskItem,
+  TaskComment,
   AppNotification,
   PushSubscriptionItem,
+  UniversalAcknowledgement,
+  AcknowledgementItemType,
+  AcknowledgementStatus,
+  AcknowledgementSummary,
+  NotificationState,
+  NotificationPreference,
+  DEFAULT_NOTIFICATION_PREFERENCES,
+  DriveResource,
+  DriveSection,
+  DriveFileType,
+  SystemSettings,
+  DEFAULT_SYSTEM_SETTINGS,
+  PublicHolidayDefinition,
+  MailReminder,
 } from './types';
 import { hashPassword, verifyPassword } from '../auth/password';
 import { getPasswordPolicyError } from '../auth/password-policy';
@@ -400,10 +419,11 @@ export class SupabaseDataStore {
     return groups.some((g) => g.leader_id === leaderEmployeeId && g.member_ids.includes(memberEmployeeId));
   }
 
-  public async getEmployees(filter?: { departmentId?: string; groupId?: string; search?: string }): Promise<Employee[]> {
+  public async getEmployees(filter?: { departmentId?: string; groupId?: string; search?: string; status?: 'ACTIVE' | 'INACTIVE' }): Promise<Employee[]> {
     let q = db().from('employees').select('*');
     if (filter?.departmentId) q = q.eq('department_id', filter.departmentId);
     if (filter?.groupId) q = q.eq('group_id', filter.groupId);
+    if (filter?.status) q = q.eq('status', filter.status);
     const { data, error } = await q;
     if (error) err(error, 'Failed to list employees');
     let result = (data || []).map(mapEmployee);
@@ -565,6 +585,401 @@ export class SupabaseDataStore {
     const { data, error } = await q;
     if (error) err(error, 'Failed to load attendance');
     return (data || []) as AttendanceRecord[];
+  }
+
+  // Attendance Compliance Rules & Corrections (§§ 1, 3)
+  private memoryAttendanceRules: AttendanceRuleConfig = { ...DEFAULT_ATTENDANCE_RULES };
+  private memoryCorrections: AttendanceCorrectionRequest[] = [];
+
+  public async getAttendanceRules(): Promise<AttendanceRuleConfig> {
+    try {
+      const { data, error } = await db().from('system_settings').select('value').eq('key', 'attendance_rules').maybeSingle();
+      if (!error && data?.value) {
+        return { ...DEFAULT_ATTENDANCE_RULES, ...data.value };
+      }
+    } catch {}
+    return { ...this.memoryAttendanceRules };
+  }
+
+  public async updateAttendanceRules(rules: Partial<AttendanceRuleConfig>): Promise<AttendanceRuleConfig> {
+    const merged = { ...this.memoryAttendanceRules, ...rules };
+    this.memoryAttendanceRules = merged;
+    this.memorySystemSettings.attendanceRules = { ...merged };
+    try {
+      await db().from('system_settings').upsert({ key: 'attendance_rules', value: merged, updated_at: new Date().toISOString() });
+    } catch {}
+    return { ...merged };
+  }
+
+  private memorySystemSettings: SystemSettings = { ...DEFAULT_SYSTEM_SETTINGS };
+
+  public async getSystemSettings(): Promise<SystemSettings> {
+    try {
+      const { data, error } = await db().from('system_settings').select('value').eq('key', 'general_settings').maybeSingle();
+      if (!error && data?.value) {
+        return { ...DEFAULT_SYSTEM_SETTINGS, ...data.value };
+      }
+    } catch {}
+    return { ...this.memorySystemSettings };
+  }
+
+  public async updateSystemSettings(
+    patch: Partial<SystemSettings>,
+    updatedBy?: { id: string; name: string }
+  ): Promise<SystemSettings> {
+    const current = await this.getSystemSettings();
+    const merged: SystemSettings = {
+      ...current,
+      ...patch,
+      attendanceRules: {
+        ...current.attendanceRules,
+        ...(patch.attendanceRules || {}),
+      },
+      reminderTiming: {
+        ...current.reminderTiming,
+        ...(patch.reminderTiming || {}),
+      },
+      taskReminderIntervals: {
+        ...current.taskReminderIntervals,
+        ...(patch.taskReminderIntervals || {}),
+      },
+      holidays: patch.holidays ? [...patch.holidays] : current.holidays,
+      updated_at: new Date().toISOString(),
+      updated_by_id: updatedBy?.id || current.updated_by_id,
+      updated_by_name: updatedBy?.name || current.updated_by_name,
+    };
+    this.memorySystemSettings = merged;
+    this.memoryAttendanceRules = { ...merged.attendanceRules };
+    try {
+      await db().from('system_settings').upsert({ key: 'general_settings', value: merged, updated_at: new Date().toISOString() });
+    } catch {}
+    return { ...merged };
+  }
+
+  public async addHoliday(holiday: PublicHolidayDefinition): Promise<PublicHolidayDefinition[]> {
+    const current = await this.getSystemSettings();
+    const existing = current.holidays.filter(
+      (h) => !(h.date === holiday.date && h.name.toLowerCase() === holiday.name.toLowerCase())
+    );
+    const updatedHolidays = [...existing, holiday].sort((a, b) => a.date.localeCompare(b.date));
+    await this.updateSystemSettings({ holidays: updatedHolidays });
+    return updatedHolidays;
+  }
+
+  public async deleteHoliday(date: string, name: string): Promise<PublicHolidayDefinition[]> {
+    const current = await this.getSystemSettings();
+    const updatedHolidays = current.holidays.filter(
+      (h) => !(h.date === date && h.name.toLowerCase() === name.toLowerCase())
+    );
+    await this.updateSystemSettings({ holidays: updatedHolidays });
+    return updatedHolidays;
+  }
+
+
+  public async getAttendanceCorrections(filter?: {
+    employeeId?: string;
+    userId?: string;
+    groupId?: string;
+    status?: AttendanceCorrectionStatus;
+    date?: string;
+  }): Promise<AttendanceCorrectionRequest[]> {
+    try {
+      let q = db().from('attendance_corrections').select('*').order('created_at', { ascending: false });
+      if (filter?.employeeId) q = q.eq('employee_id', filter.employeeId);
+      if (filter?.userId) q = q.eq('user_id', filter.userId);
+      if (filter?.groupId) q = q.eq('group_id', filter.groupId);
+      if (filter?.status) q = q.eq('status', filter.status);
+      if (filter?.date) q = q.eq('date', filter.date);
+      const { data, error } = await q;
+      if (!error && data) return data as AttendanceCorrectionRequest[];
+    } catch {}
+
+    let result = [...this.memoryCorrections];
+    if (filter?.employeeId) result = result.filter((c) => c.employee_id === filter.employeeId);
+    if (filter?.userId) result = result.filter((c) => c.user_id === filter.userId);
+    if (filter?.groupId) result = result.filter((c) => c.group_id === filter.groupId);
+    if (filter?.status) result = result.filter((c) => c.status === filter.status);
+    if (filter?.date) result = result.filter((c) => c.date === filter.date);
+    return result.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+  }
+
+  public async getAttendanceCorrectionById(id: string): Promise<AttendanceCorrectionRequest | null> {
+    try {
+      const { data, error } = await db().from('attendance_corrections').select('*').eq('id', id).maybeSingle();
+      if (!error && data) return data as AttendanceCorrectionRequest;
+    } catch {}
+    return this.memoryCorrections.find((c) => c.id === id) || null;
+  }
+
+  public async createAttendanceCorrection(data: {
+    user_id: string;
+    employee_id: string;
+    employee_name: string;
+    department_name: string;
+    group_id?: string | null;
+    group_name?: string | null;
+    date: string;
+    current_status: string;
+    requested_status: AttendanceStatus;
+    reason: string;
+  }): Promise<AttendanceCorrectionRequest> {
+    const now = new Date().toISOString();
+    const req: AttendanceCorrectionRequest = {
+      id: `cor-${crypto.randomUUID()}`,
+      user_id: data.user_id,
+      employee_id: data.employee_id,
+      employee_name: data.employee_name,
+      department_name: data.department_name,
+      group_id: data.group_id || null,
+      group_name: data.group_name || null,
+      date: data.date,
+      current_status: data.current_status,
+      requested_status: data.requested_status,
+      reason: data.reason,
+      status: 'PENDING',
+      created_at: now,
+      updated_at: now,
+    };
+    try {
+      const { data: inserted, error } = await db().from('attendance_corrections').insert(req).select().single();
+      if (!error && inserted) return inserted as AttendanceCorrectionRequest;
+    } catch {}
+    this.memoryCorrections.push(req);
+    return { ...req };
+  }
+
+  public async reviewAttendanceCorrection(
+    id: string,
+    review: {
+      status: 'APPROVED' | 'REJECTED';
+      reviewed_by_id: string;
+      reviewed_by_name: string;
+      review_notes?: string;
+    }
+  ): Promise<AttendanceCorrectionRequest> {
+    const now = new Date().toISOString();
+    let existing = await this.getAttendanceCorrectionById(id);
+    if (!existing) throw new Error('Attendance correction request not found.');
+    if (existing.status !== 'PENDING') throw new Error(`Correction request has already been ${existing.status.toLowerCase()}.`);
+
+    const updated: AttendanceCorrectionRequest = {
+      ...existing,
+      status: review.status,
+      reviewed_by_id: review.reviewed_by_id,
+      reviewed_by_name: review.reviewed_by_name,
+      reviewed_at: now,
+      review_notes: review.review_notes || '',
+      updated_at: now,
+    };
+
+    try {
+      await db().from('attendance_corrections').update(updated).eq('id', id);
+    } catch {}
+
+    const memIdx = this.memoryCorrections.findIndex((c) => c.id === id);
+    if (memIdx !== -1) this.memoryCorrections[memIdx] = updated;
+
+    if (review.status === 'APPROVED') {
+      await this.markDailyAttendance({
+        employee_id: existing.employee_id,
+        employee_name: existing.employee_name,
+        date: existing.date,
+        status: existing.requested_status,
+        punch_time: 'Approved Correction',
+        notes: `Correction approved by ${review.reviewed_by_name}: ${existing.reason}`,
+        marked_by_id: review.reviewed_by_id,
+        is_admin_override: true,
+      });
+    }
+
+    return { ...updated };
+  }
+
+  public markAttendance = this.markDailyAttendance.bind(this);
+
+  // Universal Acknowledgement System (§§ 5, 6, 7, 8, 29)
+  private memoryAcknowledgements: UniversalAcknowledgement[] = [];
+
+  public async getAcknowledgements(filter?: {
+    itemType?: AcknowledgementItemType;
+    itemId?: string;
+    recipientUserId?: string;
+    status?: AcknowledgementStatus;
+    groupId?: string;
+  }): Promise<UniversalAcknowledgement[]> {
+    try {
+      let q = db().from('acknowledgements').select('*').order('created_at', { ascending: false });
+      if (filter?.itemType) q = q.eq('item_type', filter.itemType);
+      if (filter?.itemId) q = q.eq('item_id', filter.itemId);
+      if (filter?.recipientUserId) q = q.eq('recipient_user_id', filter.recipientUserId);
+      if (filter?.status) q = q.eq('status', filter.status);
+      if (filter?.groupId) q = q.eq('group_id', filter.groupId);
+      const { data, error } = await q;
+      if (!error && data) return data as UniversalAcknowledgement[];
+    } catch {}
+
+    let list = [...this.memoryAcknowledgements];
+    if (filter?.itemType) list = list.filter((a) => a.item_type === filter.itemType);
+    if (filter?.itemId) list = list.filter((a) => a.item_id === filter.itemId);
+    if (filter?.recipientUserId) list = list.filter((a) => a.recipient_user_id === filter.recipientUserId);
+    if (filter?.status) list = list.filter((a) => a.status === filter.status);
+    if (filter?.groupId) list = list.filter((a) => a.group_id === filter.groupId);
+    return list.sort((a, b) => b.created_at.localeCompare(a.created_at));
+  }
+
+  public async getAcknowledgementById(id: string): Promise<UniversalAcknowledgement | null> {
+    try {
+      const { data, error } = await db().from('acknowledgements').select('*').eq('id', id).maybeSingle();
+      if (!error && data) return data as UniversalAcknowledgement;
+    } catch {}
+    return this.memoryAcknowledgements.find((a) => a.id === id) || null;
+  }
+
+  public async createAcknowledgements(
+    items: Omit<UniversalAcknowledgement, 'id' | 'created_at' | 'updated_at'>[]
+  ): Promise<UniversalAcknowledgement[]> {
+    const now = new Date().toISOString();
+    const created: UniversalAcknowledgement[] = [];
+    for (const item of items) {
+      const existingIdx = this.memoryAcknowledgements.findIndex(
+        (a) => a.item_type === item.item_type && a.item_id === item.item_id && a.recipient_user_id === item.recipient_user_id
+      );
+      if (existingIdx !== -1) {
+        created.push({ ...this.memoryAcknowledgements[existingIdx] });
+        continue;
+      }
+      const newAck: UniversalAcknowledgement = {
+        ...item,
+        id: `ack-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`,
+        status: item.status || 'pending',
+        created_at: now,
+        updated_at: now,
+      };
+      this.memoryAcknowledgements.push(newAck);
+      created.push({ ...newAck });
+      try {
+        await db().from('acknowledgements').insert(newAck);
+      } catch {}
+    }
+    return created;
+  }
+
+  public async recordAcknowledgement(params: {
+    itemType: AcknowledgementItemType;
+    itemId: string;
+    userId: string;
+    ip?: string;
+    userAgent?: string;
+    notes?: string;
+  }): Promise<UniversalAcknowledgement | null> {
+    const now = new Date().toISOString();
+    const index = this.memoryAcknowledgements.findIndex(
+      (a) => a.item_type === params.itemType && a.item_id === params.itemId && a.recipient_user_id === params.userId
+    );
+
+    if (index === -1) {
+      const user = await this.getUserById(params.userId);
+      const emp = await this.getEmployeeByUserId(params.userId);
+      const newAck: UniversalAcknowledgement = {
+        id: `ack-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`,
+        item_type: params.itemType,
+        item_id: params.itemId,
+        item_title: params.notes || `${params.itemType} acknowledgement`,
+        recipient_user_id: params.userId,
+        recipient_name: emp?.name || user?.name || 'User',
+        recipient_role: user?.role || 'intern',
+        recipient_email: emp?.email || user?.username || '',
+        department_id: emp?.department_id,
+        department_name: emp?.department_name || '',
+        group_id: emp?.group_id || null,
+        group_name: emp?.group_name || null,
+        status: 'acknowledged',
+        acknowledged_at: now,
+        acknowledged_ip: params.ip || '127.0.0.1',
+        acknowledged_user_agent: params.userAgent || 'unknown',
+        created_at: now,
+        updated_at: now,
+      };
+      this.memoryAcknowledgements.push(newAck);
+      try {
+        await db().from('acknowledgements').insert(newAck);
+      } catch {}
+      return { ...newAck };
+    }
+
+    const existing = this.memoryAcknowledgements[index];
+    if (existing.status === 'acknowledged') {
+      return { ...existing };
+    }
+
+    const updated: UniversalAcknowledgement = {
+      ...existing,
+      status: 'acknowledged',
+      acknowledged_at: now,
+      acknowledged_ip: params.ip || '127.0.0.1',
+      acknowledged_user_agent: params.userAgent || 'unknown',
+      notes: params.notes || existing.notes,
+      updated_at: now,
+    };
+    this.memoryAcknowledgements[index] = updated;
+    try {
+      await db().from('acknowledgements').update(updated).eq('id', existing.id);
+    } catch {}
+    return { ...updated };
+  }
+
+  public async updateAcknowledgementStatus(
+    id: string,
+    status: AcknowledgementStatus
+  ): Promise<UniversalAcknowledgement | null> {
+    const index = this.memoryAcknowledgements.findIndex((a) => a.id === id);
+    if (index === -1) return null;
+    const updated: UniversalAcknowledgement = {
+      ...this.memoryAcknowledgements[index],
+      status,
+      updated_at: new Date().toISOString(),
+    };
+    this.memoryAcknowledgements[index] = updated;
+    try {
+      await db().from('acknowledgements').update({ status, updated_at: updated.updated_at }).eq('id', id);
+    } catch {}
+    return { ...updated };
+  }
+
+  public async getItemAcknowledgementSummary(
+    itemType: AcknowledgementItemType,
+    itemId: string
+  ): Promise<AcknowledgementSummary> {
+    const acks = await this.getAcknowledgements({ itemType, itemId });
+    const totalRecipients = acks.length;
+    const acknowledgedCount = acks.filter((a) => a.status === 'acknowledged').length;
+    const overdueCount = acks.filter((a) => a.status === 'overdue').length;
+    const pendingCount = acks.filter((a) => a.status === 'pending').length;
+    const complianceRate = totalRecipients > 0 ? Math.round((acknowledgedCount / totalRecipients) * 100) : 100;
+    const firstItem = acks[0];
+
+    return {
+      itemId,
+      itemType,
+      itemTitle: firstItem?.item_title || '',
+      totalRecipients,
+      acknowledgedCount,
+      pendingCount,
+      overdueCount,
+      complianceRate,
+      dueAt: firstItem?.due_at,
+      recipients: acks.map((a) => ({
+        id: a.id,
+        userId: a.recipient_user_id,
+        name: a.recipient_name || 'Team Member',
+        role: a.recipient_role || 'intern',
+        departmentName: a.department_name || '',
+        groupName: a.group_name || undefined,
+        status: a.status,
+        dueAt: a.due_at,
+        acknowledgedAt: a.acknowledged_at,
+      })),
+    };
   }
 
   public async getLeaveRequests(filter?: { employeeId?: string; status?: LeaveStatus }): Promise<LeaveRequest[]> {
@@ -730,6 +1145,144 @@ export class SupabaseDataStore {
   public async deleteTask(id: string): Promise<boolean> {
     const { error, count } = await db().from('tasks').delete({ count: 'exact' }).eq('id', id);
     if (error) err(error, 'Failed to delete task');
+    return Boolean(count);
+  }
+
+  public async addTaskComment(
+    taskId: string,
+    comment: Omit<TaskComment, 'id' | 'created_at' | 'task_id'>
+  ): Promise<TaskItem | null> {
+    const task = await this.getTaskById(taskId);
+    if (!task) return null;
+
+    const now = new Date().toISOString();
+    const newComment: TaskComment = {
+      id: `comment-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
+      task_id: taskId,
+      author_id: comment.author_id,
+      author_name: comment.author_name,
+      content: comment.content,
+      created_at: now,
+    };
+
+    const comments = Array.isArray(task.comments) ? [...task.comments, newComment] : [newComment];
+    const activity = Array.isArray(task.activity) ? [...task.activity] : [];
+    activity.push({
+      at: now,
+      by_id: comment.author_id,
+      by_name: comment.author_name,
+      action: 'commented',
+    });
+
+    const { data, error } = await db()
+      .from('tasks')
+      .update({ comments, activity, updated_at: now })
+      .eq('id', taskId)
+      .select('*')
+      .maybeSingle();
+
+    if (error) err(error, 'Failed to add task comment');
+    return data ? { ...data, comments: data.comments || [], activity: data.activity || [] } : null;
+  }
+
+  public async acknowledgeTaskReceipt(
+    taskId: string,
+    userId: string,
+    userName: string
+  ): Promise<TaskItem | null> {
+    const task = await this.getTaskById(taskId);
+    if (!task) return null;
+
+    const now = new Date().toISOString();
+    const activity = Array.isArray(task.activity) ? [...task.activity] : [];
+    activity.push({
+      at: now,
+      by_id: userId,
+      by_name: userName,
+      action: 'acknowledged receipt',
+    });
+
+    const { data, error } = await db()
+      .from('tasks')
+      .update({
+        acknowledged_at: now,
+        acknowledged_by_id: userId,
+        activity,
+        updated_at: now,
+      })
+      .eq('id', taskId)
+      .select('*')
+      .maybeSingle();
+
+    if (error) err(error, 'Failed to acknowledge task receipt');
+    return data ? { ...data, activity: data.activity || [] } : null;
+  }
+
+  // -------------------------------------------------------------
+  // GOOGLE DRIVE & WORKSPACE EXPLORER (Roadmap § 12)
+  // -------------------------------------------------------------
+
+  public async getDriveResources(options?: {
+    userId?: string;
+    section?: DriveSection;
+    groupId?: string;
+    isAdmin?: boolean;
+  }): Promise<DriveResource[]> {
+    let q = db().from('drive_resources').select('*').order('updated_at', { ascending: false });
+    if (options?.section) q = q.eq('section', options.section);
+    const { data, error } = await q;
+    if (error) err(error, 'Failed to list drive resources');
+
+    let list: DriveResource[] = (data || []).map((d: any) => ({ ...d }));
+    if (!options?.isAdmin && options?.userId) {
+      const uid = options.userId;
+      const gid = options.groupId;
+      list = list.filter((r) => {
+        if (r.section === 'company_resources' || r.is_company_wide) return true;
+        if (r.owner_user_id === uid) return true;
+        if (r.shared_with_user_ids && r.shared_with_user_ids.includes(uid)) return true;
+        if (r.section === 'project_files' && gid && r.group_id === gid) return true;
+        return false;
+      });
+    }
+    return list;
+  }
+
+  public async getDriveResourceById(id: string): Promise<DriveResource | null> {
+    const { data, error } = await db().from('drive_resources').select('*').eq('id', id).maybeSingle();
+    if (error) err(error, 'Failed to get drive resource');
+    return data || null;
+  }
+
+  public async createDriveResource(
+    data: Omit<DriveResource, 'id' | 'created_at' | 'updated_at'>
+  ): Promise<DriveResource> {
+    const now = new Date().toISOString();
+    const id = `drive-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+    const row = { ...data, id, created_at: now, updated_at: now };
+    const { data: created, error } = await db().from('drive_resources').insert(row).select('*').single();
+    if (error) err(error, 'Failed to create drive resource');
+    return created;
+  }
+
+  public async updateDriveResource(
+    id: string,
+    data: Partial<DriveResource>
+  ): Promise<DriveResource | null> {
+    const now = new Date().toISOString();
+    const { data: updated, error } = await db()
+      .from('drive_resources')
+      .update({ ...data, updated_at: now })
+      .eq('id', id)
+      .select('*')
+      .maybeSingle();
+    if (error) err(error, 'Failed to update drive resource');
+    return updated || null;
+  }
+
+  public async deleteDriveResource(id: string): Promise<boolean> {
+    const { error, count } = await db().from('drive_resources').delete({ count: 'exact' }).eq('id', id);
+    if (error) err(error, 'Failed to delete drive resource');
     return Boolean(count);
   }
 
@@ -1268,12 +1821,16 @@ export class SupabaseDataStore {
     return { purgedCount: count || 0 };
   }
 
+  private memoryNotificationPreferences: Map<string, NotificationPreference> = new Map();
+
   public async getNotifications(
     userId: string,
-    options?: { isRead?: boolean; limit?: number }
+    options?: { isRead?: boolean; state?: NotificationState; category?: string; limit?: number }
   ): Promise<AppNotification[]> {
     let q = db().from('notifications').select('*').eq('user_id', userId).order('created_at', { ascending: false });
     if (options?.isRead !== undefined) q = q.eq('is_read', options.isRead);
+    if (options?.state) q = q.eq('state', options.state);
+    if (options?.category) q = q.eq('category', options.category);
     if (options?.limit) q = q.limit(options.limit);
     const { data, error } = await q;
     if (error) err(error, 'Failed to list notifications');
@@ -1293,10 +1850,30 @@ export class SupabaseDataStore {
   public async createNotification(
     data: Omit<AppNotification, 'id' | 'created_at' | 'is_read'>
   ): Promise<AppNotification> {
+    const isActionRequired =
+      data.state === 'action_required' ||
+      Boolean(data.action_url) ||
+      data.category === 'action_required' ||
+      data.category === 'acknowledgement_required' ||
+      data.category === 'attendance_missing';
+
+    const defaultState: NotificationState = isActionRequired ? 'action_required' : 'unread';
+
     const row: AppNotification = {
       ...data,
       id: `notif-${crypto.randomUUID()}`,
       is_read: false,
+      state: data.state || defaultState,
+      action_url: data.action_url || data.link_url,
+      action_label:
+        data.action_label ||
+        (data.category?.includes('acknowledgement')
+          ? 'Acknowledge'
+          : data.category?.includes('attendance')
+          ? 'Punch Attendance'
+          : data.action_url || data.link_url
+          ? 'View Details'
+          : undefined),
       created_at: new Date().toISOString(),
     };
     const { data: created, error } = await db().from('notifications').insert(row).select('*').single();
@@ -1306,6 +1883,64 @@ export class SupabaseDataStore {
       .then((mod) => mod.dispatchNotification(saved))
       .catch(() => {});
     return saved;
+  }
+
+  public async updateNotificationState(
+    id: string,
+    userId: string,
+    state: NotificationState
+  ): Promise<AppNotification | null> {
+    const updates: Partial<AppNotification> = { state };
+    if (state === 'read' || state === 'acknowledged') {
+      updates.is_read = true;
+    }
+    const { data, error } = await db()
+      .from('notifications')
+      .update(updates)
+      .eq('id', id)
+      .eq('user_id', userId)
+      .select('*')
+      .maybeSingle();
+    if (error) err(error, 'Failed to update notification state');
+    return data as AppNotification | null;
+  }
+
+  public async getNotificationPreferences(userId: string): Promise<NotificationPreference> {
+    try {
+      const { data, error } = await db()
+        .from('notification_preferences')
+        .select('*')
+        .eq('user_id', userId)
+        .maybeSingle();
+      if (!error && data) return data as NotificationPreference;
+    } catch {}
+
+    const mem = this.memoryNotificationPreferences.get(userId);
+    if (mem) return { ...mem };
+
+    return {
+      user_id: userId,
+      ...DEFAULT_NOTIFICATION_PREFERENCES,
+      updated_at: new Date().toISOString(),
+    };
+  }
+
+  public async updateNotificationPreferences(
+    userId: string,
+    patch: Partial<Omit<NotificationPreference, 'user_id' | 'updated_at'>>
+  ): Promise<NotificationPreference> {
+    const current = await this.getNotificationPreferences(userId);
+    const updated: NotificationPreference = {
+      ...current,
+      ...patch,
+      user_id: userId,
+      updated_at: new Date().toISOString(),
+    };
+    this.memoryNotificationPreferences.set(userId, updated);
+    try {
+      await db().from('notification_preferences').upsert(updated);
+    } catch {}
+    return { ...updated };
   }
 
   public getPushSubscriptionsForUser(userId: string): PushSubscriptionItem[] {
@@ -1442,5 +2077,62 @@ export class SupabaseDataStore {
       await this.saveCheckpoint(cp.provider, cp);
     }
     if (source.vapidKeys) this.setVapidKeys(source.vapidKeys);
+  }
+
+  private memoryMailReminders: MailReminder[] = [];
+
+  public async getMailReminders(userId: string): Promise<MailReminder[]> {
+    return this.memoryMailReminders
+      .filter((r) => r.user_id === userId)
+      .sort((a, b) => a.remind_at.localeCompare(b.remind_at));
+  }
+
+  public async createMailReminder(data: {
+    userId: string;
+    messageId: string;
+    messageSubject: string;
+    remindAt: string;
+    note?: string;
+  }): Promise<MailReminder> {
+    const reminder: MailReminder = {
+      id: `rem_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+      user_id: data.userId,
+      message_id: data.messageId,
+      message_subject: data.messageSubject,
+      remind_at: data.remindAt,
+      note: data.note,
+      is_completed: false,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+    this.memoryMailReminders.push(reminder);
+    return { ...reminder };
+  }
+
+  public async completeMailReminder(id: string, userId: string): Promise<boolean> {
+    const rem = this.memoryMailReminders.find((r) => r.id === id && r.user_id === userId);
+    if (!rem) return false;
+    rem.is_completed = true;
+    rem.updated_at = new Date().toISOString();
+    return true;
+  }
+
+  public async deleteMailReminder(id: string, userId: string): Promise<boolean> {
+    const len = this.memoryMailReminders.length;
+    this.memoryMailReminders = this.memoryMailReminders.filter((r) => !(r.id === id && r.user_id === userId));
+    return this.memoryMailReminders.length < len;
+  }
+
+  public async processDueMailReminders(): Promise<MailReminder[]> {
+    const now = new Date();
+    const triggered: MailReminder[] = [];
+    for (const r of this.memoryMailReminders) {
+      if (!r.is_completed && new Date(r.remind_at) <= now) {
+        r.is_completed = true;
+        r.updated_at = now.toISOString();
+        triggered.push({ ...r });
+      }
+    }
+    return triggered;
   }
 }

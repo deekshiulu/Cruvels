@@ -6,10 +6,12 @@ import { dataStore } from '@/lib/db/store';
 const CreateEventSchema = z.object({
   title: z.string().min(2).max(100),
   description: z.string().max(500).default(''),
-  eventType: z.enum(['meeting', 'shift', 'holiday', 'event']).default('meeting'),
+  eventType: z.enum(['meeting', 'shift', 'holiday', 'event', 'company_event', 'deadline', 'reminder']).default('meeting'),
   startTime: z.string().min(10),
   endTime: z.string().min(10),
   location: z.string().optional(),
+  meetingLink: z.string().url().optional(),
+  meetingPlatform: z.enum(['google_meet', 'zoom', 'teams', 'other']).optional(),
   attendeeIds: z.array(z.string()).optional(),
 });
 
@@ -29,10 +31,10 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const parseRes = CreateEventSchema.safeParse(body);
     if (!parseRes.success) {
-      return NextResponse.json({ error: 'Invalid event data.', success: false }, { status: 400 });
+      return NextResponse.json({ error: 'Invalid event data: ' + (parseRes.error.errors[0]?.message || ''), success: false }, { status: 400 });
     }
 
-    const { title, description, eventType, startTime, endTime, location, attendeeIds } = parseRes.data;
+    const { title, description, eventType, startTime, endTime, location, meetingLink, meetingPlatform, attendeeIds } = parseRes.data;
 
     const start = new Date(startTime).getTime();
     const end = new Date(endTime).getTime();
@@ -45,6 +47,48 @@ export async function POST(req: NextRequest) {
 
     const attendees = Array.from(new Set([user.id, ...(attendeeIds || [])]));
 
+    // Conflict Check (§ 13.3): Detect attendee overlapping events and approved leaves
+    const warnings: string[] = [];
+    const allEvents = await dataStore.getScheduleEvents();
+    const eventDate = startTime.split('T')[0];
+
+    // Check meeting overlaps
+    for (const existing of allEvents) {
+      const eStart = new Date(existing.start_time).getTime();
+      const eEnd = new Date(existing.end_time).getTime();
+      const hasOverlap = Math.max(start, eStart) < Math.min(end, eEnd);
+
+      if (hasOverlap) {
+        const sharedAttendees = existing.attendee_ids.filter((aid) => attendees.includes(aid));
+        if (sharedAttendees.length > 0) {
+          warnings.push(`Overlap with "${existing.title}" (${sharedAttendees.length} attendee(s))`);
+        }
+      }
+    }
+
+    // Check leave conflicts for attendees
+    for (const attendeeId of attendees) {
+      const emp = await dataStore.getEmployeeByUserId(attendeeId);
+      if (emp) {
+        const leaves = await dataStore.getLeaveRequests({ employeeId: emp.id });
+        const onLeave = leaves.some(
+          (l) => l.status === 'APPROVED' && eventDate >= l.start_date && eventDate <= l.end_date
+        );
+        if (onLeave) {
+          warnings.push(`${emp.name} has approved leave on ${eventDate}`);
+        }
+      }
+    }
+
+    // Auto-detect meeting platform from link if not explicitly set
+    let platform = meetingPlatform;
+    if (!platform && meetingLink) {
+      const l = meetingLink.toLowerCase();
+      if (l.includes('meet.google.com')) platform = 'google_meet';
+      else if (l.includes('zoom.us')) platform = 'zoom';
+      else if (l.includes('teams.microsoft.com')) platform = 'teams';
+    }
+
     const event = await dataStore.createScheduleEvent({
       title,
       description,
@@ -53,10 +97,12 @@ export async function POST(req: NextRequest) {
       end_time: endTime,
       location: location || 'Cruvels Office',
       attendee_ids: attendees,
+      meeting_link: meetingLink,
+      meeting_platform: platform,
       created_by: user.id,
     });
 
-    return NextResponse.json({ success: true, event });
+    return NextResponse.json({ success: true, event, warnings });
   } catch (err) {
     return handleApiError(err);
   }

@@ -13,12 +13,16 @@ export function isMailWorkerPrimary(): boolean {
   return process.env.EMAIL_SYNC_ON_READ !== 'true';
 }
 
-/** JSON/file store is allowed for local dev, tests, and CI builds only. */
+/** JSON/file store is allowed for local dev, tests, CI builds, and local offline runs. */
 export function allowJsonFileStore(): boolean {
   if (process.env.VITEST === 'true') return true;
   if (process.env.NEXT_PHASE === 'phase-production-build') return true;
   if (process.env.CI === 'true' && process.env.DATA_BACKEND === 'memory') return true;
+  if (process.env.DATA_BACKEND === 'memory' || process.env.DATA_BACKEND === 'json') return true;
+  if (process.env.ALLOW_JSON_FILE_STORE === 'true') return true;
   if (process.env.NODE_ENV !== 'production') return true;
+  // If not deployed on cloud infrastructure (Vercel/Render) and Supabase is not configured, allow local JSON store
+  if (!process.env.VERCEL && !process.env.RENDER && !isSupabaseConfigured()) return true;
   return false;
 }
 

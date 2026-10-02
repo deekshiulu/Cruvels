@@ -2,6 +2,9 @@
 
 import React, { useEffect, useState, useCallback, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import Link from 'next/link';
+import AppShell from '@/components/layout/AppShell';
+import MailNavRail from '@/components/mail/MailNavRail';
 import {
   ShieldAlert,
   Paperclip,
@@ -12,6 +15,9 @@ import {
   AlertTriangle,
   Inbox,
   CheckCircle2,
+  ArrowLeft,
+  Search,
+  Sparkles,
 } from 'lucide-react';
 import { Message } from '@/lib/db/types';
 import { clientCache } from '@/lib/cache/clientCache';
@@ -22,6 +28,7 @@ function SpamContent() {
   const query = searchParams.get('q') || '';
 
   const [page, setPage] = useState(1);
+  const [search, setSearch] = useState(query);
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(true);
   const [totalPages, setTotalPages] = useState(1);
@@ -78,7 +85,7 @@ function SpamContent() {
       if (res.ok) {
         setMessages((prev) => prev.filter((m) => m.id !== msgId));
         setTotal((prev) => Math.max(0, prev - 1));
-        setNotification('Spam message permanently removed.');
+        setNotification('Message permanently purged.');
         setTimeout(() => setNotification(null), 4000);
       }
     } catch {
@@ -86,125 +93,194 @@ function SpamContent() {
     }
   };
 
+  const handleSearchSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (search.trim()) {
+      router.push(`/mail/spam?q=${encodeURIComponent(search.trim())}`);
+    } else {
+      router.push('/mail/spam');
+    }
+  };
+
   const formatDate = (isoString?: string | null) => {
     if (!isoString) return '';
     const d = new Date(isoString);
-    return d.toLocaleDateString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+    return d.toLocaleDateString('en-IN', {
+      timeZone: 'Asia/Kolkata',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true,
+    });
   };
 
   return (
-    <div className="flex h-full flex-col space-y-4 max-w-6xl mx-auto">
-      {/* Header Banner */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-gradient-to-r from-amber-500/10 via-rose-500/10 to-orange-500/10 border border-amber-200/80 rounded-3xl p-5 shadow-xs">
-        <div className="flex items-center gap-3">
-          <div className="rounded-2xl bg-amber-500/20 p-2.5 text-amber-700">
-            <ShieldAlert className="h-6 w-6" />
+    <div className="space-y-6 max-w-7xl mx-auto pb-12">
+      {/* Mail Sub-Navigation Rail */}
+      <MailNavRail currentFolder="spam" />
+
+      {/* Header Bar */}
+      <div className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 sm:p-7 shadow-xs">
+        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-5">
+          <div className="flex items-start gap-3.5">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-tr from-amber-500 to-rose-500 text-white shadow-md shadow-amber-500/20">
+              <ShieldAlert className="h-6 w-6" />
+            </div>
+            <div className="space-y-1">
+              <div className="flex flex-wrap items-center gap-2.5">
+                <Link
+                  href="/mail/inbox"
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80 px-2.5 py-1 text-xs font-bold text-slate-700 dark:text-slate-300 hover:text-amber-600 dark:hover:text-amber-400 hover:border-amber-300 dark:hover:border-amber-700 transition-all mr-1"
+                >
+                  <ArrowLeft className="h-3.5 w-3.5" />
+                  <span>Inbox</span>
+                </Link>
+                <h1 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white tracking-tight">
+                  Spam Quarantine
+                </h1>
+                <span className="rounded-full bg-amber-100 dark:bg-amber-950/60 px-3 py-0.5 text-[10px] font-bold text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
+                  {total} {total === 1 ? 'Message' : 'Messages'}
+                </span>
+              </div>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                Zero-Trust heuristic filters isolate unverified, suspicious, or user-flagged emails here
+              </p>
+            </div>
           </div>
-          <div>
-            <h1 className="text-xl font-extrabold text-slate-900 tracking-tight flex items-center gap-2">
-              Spam & Threat Quarantine
-              <span className="text-xs font-semibold bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full border border-amber-200">
-                {total} {total === 1 ? 'Message' : 'Messages'}
-              </span>
-            </h1>
-            <p className="text-xs text-slate-600 mt-0.5">
-              Zero-Trust heuristic filters isolate unverified, suspicious, or user-flagged emails here.
-            </p>
+
+          {/* Search & Actions */}
+          <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
+            <form onSubmit={handleSearchSubmit} className="relative w-full sm:w-64">
+              <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-slate-400 dark:text-slate-500" />
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search quarantine..."
+                className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 py-2 pl-9 pr-4 text-xs text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:border-amber-500 focus:bg-white dark:focus:bg-slate-900 focus:outline-none transition-all"
+              />
+            </form>
+
+            {/* Pagination */}
+            {totalPages > 1 && (
+              <div className="flex items-center gap-1 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80 p-1 text-xs text-slate-600 dark:text-slate-300">
+                <span className="px-2 text-[11px] font-semibold font-mono">
+                  {page}/{totalPages}
+                </span>
+                <button
+                  disabled={page <= 1}
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  className="rounded-lg p-1 hover:bg-white dark:hover:bg-slate-700 hover:text-slate-900 dark:hover:text-white disabled:opacity-30 transition-all cursor-pointer"
+                >
+                  <ChevronLeft className="h-3.5 w-3.5" />
+                </button>
+                <button
+                  disabled={page >= totalPages}
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                  className="rounded-lg p-1 hover:bg-white dark:hover:bg-slate-700 hover:text-slate-900 dark:hover:text-white disabled:opacity-30 transition-all cursor-pointer"
+                >
+                  <ChevronRight className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            )}
           </div>
         </div>
-
-        {total > 0 && (
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => router.push('/mail/inbox')}
-              className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-all shadow-xs"
-            >
-              <Inbox className="h-3.5 w-3.5" />
-              <span>Back to Inbox</span>
-            </button>
-          </div>
-        )}
       </div>
 
       {notification && (
-        <div className="flex items-center gap-2 rounded-2xl border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-800 shadow-sm animate-in fade-in">
+        <div className="flex items-center gap-2 rounded-2xl border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/40 p-3.5 text-xs text-emerald-800 dark:text-emerald-300 shadow-xs animate-in fade-in">
           <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
           <span className="font-semibold">{notification}</span>
         </div>
       )}
 
       {/* Messages List Container */}
-      <div className="flex-1 overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm flex flex-col">
+      <div className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs overflow-hidden">
         {loading ? (
-          <div className="flex flex-1 flex-col items-center justify-center p-12 text-slate-400 space-y-3">
+          <div className="flex flex-col items-center justify-center py-24 text-slate-400 space-y-3">
             <div className="h-8 w-8 animate-spin rounded-full border-2 border-slate-200 border-t-amber-600" />
-            <span className="text-xs font-medium">Scanning spam quarantine...</span>
+            <span className="text-xs font-medium">Scanning quarantine...</span>
           </div>
         ) : messages.length === 0 ? (
-          <div className="flex flex-1 flex-col items-center justify-center p-16 text-center">
-            <div className="h-16 w-16 rounded-full bg-emerald-50 flex items-center justify-center text-emerald-600 mb-3 border border-emerald-100">
-              <CheckCircle2 className="h-8 w-8" />
+          <div className="flex flex-col items-center justify-center py-20 px-6 text-center max-w-xl mx-auto">
+            <div className="relative mb-6">
+              <div className="flex h-20 w-20 items-center justify-center rounded-3xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 shadow-inner">
+                <CheckCircle2 className="h-9 w-9 text-emerald-600 dark:text-emerald-400" />
+              </div>
+              <div className="absolute -top-1.5 -right-1.5 flex h-7 w-7 items-center justify-center rounded-full bg-emerald-500 text-white shadow-md">
+                <Sparkles className="h-3.5 w-3.5" />
+              </div>
             </div>
-            <h3 className="text-sm font-bold text-slate-900">Zero Spam Detected</h3>
-            <p className="text-xs text-slate-500 max-w-sm mt-1">
-              Your quarantine folder is clean. Suspicious external emails or messages you mark as spam will appear here.
+
+            <h3 className="text-lg font-bold text-slate-900 dark:text-white tracking-tight">
+              Zero Spam Detected
+            </h3>
+            <p className="mt-2 text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+              Your quarantine folder is completely clean. Suspicious external emails or messages you mark as spam will appear here.
             </p>
-            <button
-              onClick={() => router.push('/mail/inbox')}
-              className="mt-4 inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-xs font-semibold text-white hover:bg-blue-700 transition-all shadow-sm"
-            >
-              <Inbox className="h-3.5 w-3.5" />
-              <span>Return to Inbox</span>
-            </button>
+
+            <div className="flex flex-wrap items-center justify-center gap-3 mt-7">
+              <Link
+                href="/mail/inbox"
+                className="flex items-center gap-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-5 py-2.5 text-xs font-bold text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-700 transition-all"
+              >
+                <Inbox className="h-4 w-4 text-slate-500" />
+                <span>Return to Messages / Inbox</span>
+              </Link>
+            </div>
           </div>
         ) : (
-          <div className="flex-1 overflow-y-auto divide-y divide-slate-100">
+          <div className="divide-y divide-slate-100 dark:divide-slate-800">
             {messages.map((msg) => (
               <div
                 key={msg.id}
                 onClick={() => router.push(`/mail/${msg.id}`)}
-                className="group flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-5 py-3.5 hover:bg-amber-50/40 cursor-pointer transition-colors"
+                className="group flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 px-6 py-4 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-all"
               >
-                <div className="flex items-start sm:items-center gap-3 min-w-0 flex-1">
-                  <div className="rounded-full bg-rose-50 text-rose-600 p-2 border border-rose-200 shrink-0 mt-0.5 sm:mt-0">
-                    <AlertTriangle className="h-4 w-4" />
+                <div className="flex items-center gap-3.5 min-w-0 flex-1">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-amber-50 dark:bg-amber-950/50 text-amber-600 dark:text-amber-400 border border-amber-200 dark:border-amber-800">
+                    <AlertTriangle className="h-5 w-5" />
                   </div>
 
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-xs font-bold text-slate-900 truncate">
+                  <div className="min-w-0 flex-1 space-y-0.5">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-amber-700 bg-amber-50 dark:bg-amber-950/50 dark:text-amber-300 px-1.5 py-0.2 rounded border border-amber-200 dark:border-amber-800">
+                        Quarantined
+                      </span>
+                      <span className="text-xs font-bold text-slate-900 dark:text-white truncate">
                         {msg.from_name || msg.from_address}
                       </span>
-                      <span className="text-[11px] text-slate-400 font-mono">
-                        &lt;{msg.from_address}&gt;
-                      </span>
-                      <span className="inline-flex items-center text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md bg-rose-100 text-rose-700">
-                        Spam
-                      </span>
                     </div>
 
-                    <div className="text-xs font-medium text-slate-800 mt-0.5 truncate">
-                      {msg.subject || '(No Subject)'}
-                    </div>
-
-                    <div className="text-xs text-slate-500 truncate mt-0.5">
-                      {msg.snippet}
+                    <div className="flex items-baseline gap-2 text-xs min-w-0">
+                      <span className="font-semibold text-slate-800 dark:text-slate-200 truncate">
+                        {msg.subject || '(No Subject)'}
+                      </span>
+                      <span className="text-slate-400 dark:text-slate-500 truncate text-[11px]">
+                        — {msg.snippet || 'No preview available'}
+                      </span>
                     </div>
                   </div>
                 </div>
 
-                {/* Right Metadata & Action Buttons */}
-                <div className="flex items-center justify-between sm:justify-end gap-3 shrink-0 pt-1 sm:pt-0 border-t sm:border-t-0 border-slate-100">
-                  <div className="flex items-center gap-2 text-xs text-slate-400">
-                    {msg.has_attachments && <Paperclip className="h-3.5 w-3.5 text-slate-500" />}
-                    <span>{formatDate(msg.received_at || msg.created_at)}</span>
-                  </div>
+                <div className="flex items-center justify-between sm:justify-end gap-3 w-full sm:w-auto shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-100 dark:border-slate-800 text-xs">
+                  {msg.has_attachments && (
+                    <span className="flex items-center gap-1 rounded-lg bg-slate-100 dark:bg-slate-800 px-2 py-0.5 text-[11px] font-semibold text-slate-600 dark:text-slate-400">
+                      <Paperclip className="h-3 w-3" />
+                      <span>Attachment</span>
+                    </span>
+                  )}
+
+                  <span className="text-[11px] font-medium text-slate-400 dark:text-slate-500 whitespace-nowrap">
+                    {formatDate(msg.received_at || msg.created_at)}
+                  </span>
 
                   <div className="flex items-center gap-1">
                     <button
                       onClick={(e) => handleUnspam(e, msg.id)}
                       title="Not Spam (Move to Inbox)"
-                      className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-emerald-700 hover:bg-emerald-50 hover:border-emerald-300 transition-all shadow-2xs"
+                      className="inline-flex items-center gap-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-2.5 py-1 text-[11px] font-semibold text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 transition-all cursor-pointer"
                     >
                       <RotateCcw className="h-3 w-3" />
                       <span>Not Spam</span>
@@ -213,7 +289,7 @@ function SpamContent() {
                     <button
                       onClick={(e) => handleDelete(e, msg.id)}
                       title="Delete Permanently"
-                      className="rounded-lg p-1.5 text-slate-400 hover:bg-rose-50 hover:text-rose-600 transition-all"
+                      className="rounded-lg p-1 text-slate-400 hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-950/40 transition-all cursor-pointer"
                     >
                       <Trash2 className="h-4 w-4" />
                     </button>
@@ -223,31 +299,6 @@ function SpamContent() {
             ))}
           </div>
         )}
-
-        {/* Footer Pagination */}
-        {totalPages > 1 && (
-          <div className="flex items-center justify-between border-t border-slate-100 px-5 py-3 text-xs text-slate-600 bg-slate-50/50">
-            <span>
-              Page {page} of {totalPages}
-            </span>
-            <div className="flex items-center gap-1">
-              <button
-                disabled={page <= 1}
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-                className="rounded-lg border border-slate-200 bg-white p-1 text-slate-600 hover:bg-slate-50 disabled:opacity-40"
-              >
-                <ChevronLeft className="h-4 w-4" />
-              </button>
-              <button
-                disabled={page >= totalPages}
-                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                className="rounded-lg border border-slate-200 bg-white p-1 text-slate-600 hover:bg-slate-50 disabled:opacity-40"
-              >
-                <ChevronRight className="h-4 w-4" />
-              </button>
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );
@@ -255,14 +306,16 @@ function SpamContent() {
 
 export default function SpamPage() {
   return (
-    <Suspense
-      fallback={
-        <div className="flex h-96 items-center justify-center text-slate-400">
-          <div className="h-8 w-8 animate-spin rounded-full border-2 border-slate-200 border-t-amber-600" />
-        </div>
-      }
-    >
-      <SpamContent />
-    </Suspense>
+    <AppShell>
+      <Suspense
+        fallback={
+          <div className="flex h-96 items-center justify-center text-slate-400">
+            <div className="h-8 w-8 animate-spin rounded-full border-2 border-slate-200 border-t-amber-600" />
+          </div>
+        }
+      >
+        <SpamContent />
+      </Suspense>
+    </AppShell>
   );
 }

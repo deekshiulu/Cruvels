@@ -111,6 +111,14 @@ export async function POST(req: NextRequest) {
       user = (await dataStore.getUserById(user.id)) || user;
     }
 
+    // Enforce mandatory password update if using default password or flagged
+    const isDefaultPassword = password === 'Password123!' || password === 'password123';
+    if (isDefaultPassword && !user.must_change_password) {
+      await dataStore.updateUser(user.id, { must_change_password: true });
+      user.must_change_password = true;
+    }
+    const mustChangePassword = Boolean(user.must_change_password) || isDefaultPassword;
+
     // 5. Fetch assigned aliases
     const aliases = await dataStore.getAliasesByUserId(user.id);
     const activeAliases = aliases.filter((a) => a.is_active).map((a) => a.email_address);
@@ -129,7 +137,6 @@ export async function POST(req: NextRequest) {
       req,
     });
 
-    const mustChangePassword = Boolean(user.must_change_password);
     const response = NextResponse.json({
       success: true,
       mustChangePassword,

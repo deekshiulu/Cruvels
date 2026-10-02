@@ -1,7 +1,10 @@
 'use client';
 
 import React, { useEffect, useState, useRef } from 'react';
+import ThemeToggle from './ThemeToggle';
+import MobileBottomNav from './MobileBottomNav';
 import { usePathname, useRouter } from 'next/navigation';
+import Link from 'next/link';
 import {
   LayoutDashboard,
   Users,
@@ -32,6 +35,9 @@ import {
   FileText,
   ShieldAlert,
   Trash2,
+  Settings,
+  ArrowUpRight,
+  HardDrive,
 } from 'lucide-react';
 import { AuthSessionUser, AppNotification } from '@/lib/db/types';
 import { playNotificationSound, unlockAudioContext } from '@/lib/utils/sound';
@@ -49,13 +55,51 @@ function urlBase64ToUint8Array(base64String: string) {
   return outputArray;
 }
 
+
+// Module-level cache to eliminate re-renders and full-screen loading on navigation
+let cachedUser: AuthSessionUser | null = null;
+let cachedUnreadCount = 0;
+let cachedPendingTaskCount = 0;
+let lastSessionCheckTime = 0;
+let lastBadgesCheckTime = 0;
+let cachedNotifications: AppNotification[] = [];
+let cachedNotifUnreadCount = 0;
+
+
+const warmedRoutes = new Set<string>();
+const isProd = process.env.NODE_ENV === 'production';
+
+export function warmRoute(path: string, _apis?: string[], routerInstance?: any) {
+  if (warmedRoutes.has(path)) return;
+  warmedRoutes.add(path);
+
+  if (routerInstance) {
+    try {
+      routerInstance.prefetch(path);
+    } catch {}
+  }
+}
+
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
 
-  const [user, setUser] = useState<AuthSessionUser | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [unreadCount, setUnreadCount] = useState(0);
+  const [user, setUser] = useState<AuthSessionUser | null>(() => {
+    if (cachedUser) return cachedUser;
+    if (typeof window !== 'undefined') {
+      return clientCache.get<AuthSessionUser>('session_user') || null;
+    }
+    return null;
+  });
+  const [loading, setLoading] = useState(() => {
+    if (cachedUser) return false;
+    if (typeof window !== 'undefined' && clientCache.get<AuthSessionUser>('session_user')) {
+      return false;
+    }
+    return true;
+  });
+  const [unreadCount, setUnreadCount] = useState(() => cachedUnreadCount);
+  const [pendingTaskCount, setPendingTaskCount] = useState(() => cachedPendingTaskCount);
   const [syncing, setSyncing] = useState(false);
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -64,8 +108,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   // Real-time Notification Engine State
-  const [notifications, setNotifications] = useState<AppNotification[]>([]);
-  const [notifUnreadCount, setNotifUnreadCount] = useState(0);
+  const [notifications, setNotifications] = useState<AppNotification[]>(() => cachedNotifications);
+  const [notifUnreadCount, setNotifUnreadCount] = useState(() => cachedNotifUnreadCount);
   const [notifDropdownOpen, setNotifDropdownOpen] = useState(false);
   const [notifCategoryFilter, setNotifCategoryFilter] = useState<string>('all');
   const [devicePermission, setDevicePermission] = useState<'default' | 'granted' | 'denied'>('default');
@@ -77,16 +121,17 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     try {
       const res = await fetch('/api/notifications?limit=25');
       if (res.status === 401) {
-        // Double check session before redirecting
-        const sessionCheck = await fetch('/api/auth/me').catch(() => null);
-        if (sessionCheck && sessionCheck.status === 401) {
-          router.replace('/login');
-        }
+        cachedUser = null;
+        clearTabSession();
+        clientCache.clear();
+        router.replace('/login?reason=password_reset');
         return;
       }
       if (res.ok) {
         const data = await res.json();
         const incoming: AppNotification[] = data.notifications || [];
+        cachedNotifications = incoming;
+        cachedNotifUnreadCount = data.unreadCount || 0;
         setNotifications(incoming);
         setNotifUnreadCount(data.unreadCount || 0);
 
@@ -127,11 +172,23 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const fetchSessionAndUnread = async () => {
+  const fetchSessionAndUnread = async (force = false) => {
+    const now = Date.now();
+    // Fast path: if session was validated within the last 30 seconds, avoid blocking navigation with redundant API calls
+    if (!force && cachedUser && now - lastSessionCheckTime < 30000) {
+      setUser(cachedUser);
+      setLoading(false);
+      return;
+    }
+
     try {
       const res = await fetch('/api/auth/me');
       if (res.status === 401) {
-        router.replace('/login');
+        cachedUser = null;
+        lastSessionCheckTime = 0;
+        clearTabSession();
+        clientCache.clear();
+        router.replace('/login?reason=password_reset');
         return;
       }
       if (!res.ok) {
@@ -139,17 +196,32 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         return;
       }
       const data = await res.json();
-      setUser(data.user);
-      if (data.user?.id) {
+      if (data.user) {
+        cachedUser = data.user;
+        lastSessionCheckTime = Date.now();
+        setUser(data.user);
         clientCache.setUserScope(data.user.id);
+        clientCache.set('session_user', undefined, data.user);
       }
 
-      // Fetch unread emails and notifications in background (non-blocking, non-fatal)
+      // Fetch unread emails and task count in background (non-blocking, non-fatal)
       fetch('/api/mail/inbox?limit=1')
         .then((r) => (r.ok ? r.json() : null))
         .then((inboxData) => {
           if (inboxData?.unreadCount !== undefined) {
+            cachedUnreadCount = inboxData.unreadCount;
             setUnreadCount(inboxData.unreadCount);
+          }
+        })
+        .catch(() => {});
+
+      fetch('/api/tasks')
+        .then((r) => (r.ok ? r.json() : null))
+        .then((d) => {
+          if (d?.tasks) {
+            const pending = d.tasks.filter((t: any) => t.status === 'todo' || t.status === 'in_progress').length;
+            cachedPendingTaskCount = pending;
+            setPendingTaskCount(pending);
           }
         })
         .catch(() => {});
@@ -228,8 +300,15 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         fetch('/api/mail/inbox?limit=1')
           .then((r) => (r.ok ? r.json() : null))
           .then((inboxData) => {
-            if (inboxData?.unreadCount !== undefined) {
-              setUnreadCount(inboxData.unreadCount);
+            if (inboxData?.unreadCount !== undefined) setUnreadCount(inboxData.unreadCount);
+          })
+          .catch(() => {});
+        fetch('/api/tasks')
+          .then((r) => (r.ok ? r.json() : null))
+          .then((d) => {
+            if (d?.tasks) {
+              const pending = d.tasks.filter((t: any) => t.status === 'todo' || t.status === 'in_progress').length;
+              setPendingTaskCount(pending);
             }
           })
           .catch(() => {});
@@ -240,6 +319,23 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
     try {
       eventSource = new EventSource('/api/notifications/stream');
+      
+      // Handle immediate admin-triggered session termination
+      eventSource.addEventListener('FORCE_LOGOUT', (ev) => {
+        try {
+          const data = JSON.parse((ev as MessageEvent).data);
+          cachedUser = null;
+          lastSessionCheckTime = 0;
+          clearTabSession();
+          clientCache.clear();
+          fetch('/api/auth/logout', { method: 'POST' }).finally(() => {
+            window.location.href = `/login?reason=${encodeURIComponent(data?.reason || 'password_reset')}`;
+          });
+        } catch {
+          window.location.href = '/login?reason=password_reset';
+        }
+      });
+
       eventSource.addEventListener('notification', (ev) => {
         try {
           const incoming = JSON.parse((ev as MessageEvent).data) as AppNotification;
@@ -425,6 +521,12 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     try {
       await fetch('/api/auth/logout', { method: 'POST' });
     } finally {
+      cachedUser = null;
+      cachedUnreadCount = 0;
+      cachedPendingTaskCount = 0;
+      lastSessionCheckTime = 0;
+      cachedNotifications = [];
+      cachedNotifUnreadCount = 0;
       clientCache.invalidate();
       clientCache.setUserScope('');
       router.push('/login');
@@ -467,10 +569,10 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[#F8FAFC]">
+      <div className="flex min-h-screen items-center justify-center" style={{ background: 'var(--paper)' }}>
         <div className="flex flex-col items-center gap-3">
-          <div className="h-9 w-9 animate-spin rounded-full border-3 border-blue-600 border-t-transparent" />
-          <p className="text-xs text-slate-500 font-medium tracking-wide">Loading Cruvels Internal Portal...</p>
+          <div className="h-9 w-9 animate-spin rounded-full border-2 border-[var(--teal)] border-t-transparent" />
+          <p className="text-xs font-medium" style={{ color: 'var(--muted)', fontFamily: 'Archivo, sans-serif' }}>Loading Cruvels Workplace OS...</p>
         </div>
       </div>
     );
@@ -480,10 +582,10 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   if (user.mustChangePassword && pathname !== '/profile') {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[#F8FAFC]">
+      <div className="flex min-h-screen items-center justify-center" style={{ background: 'var(--paper)' }}>
         <div className="flex flex-col items-center gap-3">
-          <div className="h-9 w-9 animate-spin rounded-full border-3 border-amber-600 border-t-transparent" />
-          <p className="text-xs text-amber-800 font-medium tracking-wide">
+          <div className="h-9 w-9 animate-spin rounded-full border-2 border-[var(--amber)] border-t-transparent" />
+          <p className="text-xs font-medium" style={{ color: 'var(--amber)', fontFamily: 'Archivo, sans-serif' }}>
             Password update required. Redirecting to profile setup...
           </p>
         </div>
@@ -500,37 +602,70 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     return pathname.startsWith(path);
   };
 
+  const getNavStyle = (active: boolean) => {
+    if (active) {
+      return {
+        background: 'var(--teal-wash)',
+        color: 'var(--teal-ink)',
+        fontWeight: 700,
+        border: '1px solid var(--line)',
+        boxShadow: '0 2px 8px -2px rgba(10,25,47,0.08)',
+      };
+    }
+    if (user.mustChangePassword) {
+      return { opacity: 0.45, pointerEvents: 'none' as const };
+    }
+    return {};
+  };
+
+  const getNavIconStyle = (active: boolean) => {
+    return active ? { color: 'var(--teal)' } : {};
+  };
+
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-[#F8FAFC] text-slate-900 antialiased font-sans">
+    <div className="flex h-screen h-[100dvh] w-screen overflow-hidden antialiased" style={{ background: 'var(--paper)', color: 'var(--ink)', fontFamily: 'Archivo, sans-serif' }}>
+      {/* Mobile Backdrop Overlay */}
+      {mobileMenuOpen && (
+        <div
+          className="fixed inset-0 z-30 bg-black/50 backdrop-blur-xs md:hidden"
+          onClick={() => setMobileMenuOpen(false)}
+          aria-hidden="true"
+        />
+      )}
+
       {/* Sidebar Navigation */}
       <aside
-        className={`fixed inset-y-0 left-0 z-40 w-64 shrink-0 flex-col border-r border-slate-200 bg-white p-4 justify-between select-none shadow-sm transition-transform duration-200 md:static md:flex ${
+        className={`fixed inset-y-0 left-0 z-40 w-64 shrink-0 flex-col p-4 justify-between transition-transform duration-200 md:static md:flex ${
           mobileMenuOpen ? 'flex translate-x-0' : 'hidden -translate-x-full md:flex md:translate-x-0'
         }`}
+        style={{ background: 'var(--surface)', borderRight: '1px solid var(--line)' }}
       >
         <div className="space-y-6 overflow-y-auto pr-1">
           {/* Brand Header */}
           <div className="flex items-center justify-between px-1.5 pt-1">
             <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-tr from-blue-600 via-indigo-600 to-purple-600 shadow-md shadow-blue-500/20">
-                <Building2 className="h-5 w-5 text-white" />
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl p-1 shadow-xs bg-[#0A192F] border border-[#1E3A5F]/60">
+                <img src="/cruvels-logo-transparent.png" alt="Cruvels Logo" className="h-8 w-8 object-contain" />
               </div>
               <div className="truncate min-w-0">
-                <div className="font-bold text-sm text-slate-900 tracking-tight flex items-center gap-1.5">
-                  Cruvels Portal
-                  <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[9px] font-bold text-blue-700 uppercase tracking-wider border border-blue-200">
-                    {user.role}
+                <div className="text-sm tracking-tight flex items-center gap-1.5 font-bold" style={{ fontFamily: 'Bricolage Grotesque, sans-serif', color: 'var(--ink)' }}>
+                  Cruvels OS
+                  <span className="rounded-full px-2 py-0.5 text-[9px] font-extrabold bg-blue-950/80 text-blue-300 border border-blue-500/40 shadow-xs">
+                    {user.role === 'admin' ? 'Admin' : user.role}
                   </span>
                 </div>
-                <div className="text-[11px] text-slate-500 truncate font-mono mt-0.5" title={user.primaryAlias}>
+                <div className="text-[11px] truncate mt-0.5 font-mono" style={{ color: 'var(--muted)' }} title={user.primaryAlias}>
                   {user.primaryAlias}
                 </div>
               </div>
             </div>
 
             <button
+              type="button"
               onClick={() => setMobileMenuOpen(false)}
-              className="rounded-lg p-1 text-slate-400 hover:text-slate-700 md:hidden"
+              className="rounded-lg p-2 md:hidden cursor-pointer touch-manipulation min-h-[40px] min-w-[40px] flex items-center justify-center transition-colors hover:bg-black/5 dark:hover:bg-white/10"
+              style={{ color: 'var(--muted)' }}
+              aria-label="Close mobile navigation"
             >
               <X className="h-5 w-5" />
             </button>
@@ -538,381 +673,232 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
           {/* Password Required Notice Banner */}
           {user.mustChangePassword && (
-            <div className="rounded-2xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900 shadow-xs">
+            <div className="rounded-lg p-3 text-xs" style={{ border: '1px solid var(--amber)', background: 'var(--amber-dim)', color: 'var(--ink)' }}>
               <div className="flex items-center gap-1.5 font-bold">
-                <Lock className="h-3.5 w-3.5 text-amber-600 shrink-0" />
+                <Lock className="h-3.5 w-3.5 shrink-0" style={{ color: 'var(--amber)' }} />
                 <span>Password Setup Required</span>
               </div>
-              <p className="mt-1 text-[11px] text-amber-700 leading-tight">
+              <p className="mt-1 text-[11px] leading-tight" style={{ color: 'var(--muted)' }}>
                 Workspace modules are locked until you create a new password.
               </p>
             </div>
           )}
 
-          {/* Navigation Section 1: Workforce Operations */}
-          <div className="space-y-1">
-            <div className="px-2 text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1.5">
-              Workforce Operations
-            </div>
-
-            <button
-              onClick={() => navigateTo('/dashboard')}
-              className={`group flex w-full items-center justify-between rounded-xl px-3 py-2 text-xs font-semibold transition-all ${
-                isNavActive('/dashboard')
-                  ? 'bg-blue-50 text-blue-700 border border-blue-200 shadow-sm'
-                  : user.mustChangePassword
-                  ? 'text-slate-400 hover:bg-slate-50 cursor-not-allowed'
-                  : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
-              }`}
-            >
-              <div className="flex items-center gap-2.5">
-                <LayoutDashboard className={`h-4 w-4 ${isNavActive('/dashboard') ? 'text-blue-600' : 'text-slate-400 group-hover:text-slate-700'}`} />
-                <span>Dashboard</span>
-              </div>
-              {user.mustChangePassword && <Lock className="h-3 w-3 text-slate-400" />}
-            </button>
-
-            {(user.role === 'admin' || user.role === 'manager' || user.role === 'team_lead') && (
-              <button
-                onClick={() => navigateTo('/employees')}
-                className={`group flex w-full items-center justify-between rounded-xl px-3 py-2 text-xs font-semibold transition-all ${
-                  isNavActive('/employees')
-                    ? 'bg-blue-50 text-blue-700 border border-blue-200 shadow-sm'
-                    : user.mustChangePassword
-                    ? 'text-slate-400 hover:bg-slate-50 cursor-not-allowed'
-                    : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
-                }`}
-              >
-                <div className="flex items-center gap-2.5">
-                  <Users className={`h-4 w-4 ${isNavActive('/employees') ? 'text-blue-600' : 'text-slate-400 group-hover:text-slate-700'}`} />
-                  <span>Employee Directory</span>
-                </div>
-                {user.mustChangePassword && <Lock className="h-3 w-3 text-slate-400" />}
-              </button>
-            )}
-
-            <button
-              onClick={() => navigateTo('/attendance')}
-              className={`group flex w-full items-center justify-between rounded-xl px-3 py-2 text-xs font-semibold transition-all ${
-                isNavActive('/attendance')
-                  ? 'bg-blue-50 text-blue-700 border border-blue-200 shadow-sm'
-                  : user.mustChangePassword
-                  ? 'text-slate-400 hover:bg-slate-50 cursor-not-allowed'
-                  : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
-              }`}
-            >
-              <div className="flex items-center gap-2.5">
-                <Clock className={`h-4 w-4 ${isNavActive('/attendance') ? 'text-blue-600' : 'text-slate-400 group-hover:text-slate-700'}`} />
-                <span>Attendance</span>
-              </div>
-              {user.mustChangePassword && <Lock className="h-3 w-3 text-slate-400" />}
-            </button>
-
-            <button
-              onClick={() => navigateTo('/leaves')}
-              className={`group flex w-full items-center justify-between rounded-xl px-3 py-2 text-xs font-semibold transition-all ${
-                isNavActive('/leaves')
-                  ? 'bg-blue-50 text-blue-700 border border-blue-200 shadow-sm'
-                  : user.mustChangePassword
-                  ? 'text-slate-400 hover:bg-slate-50 cursor-not-allowed'
-                  : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
-              }`}
-            >
-              <div className="flex items-center gap-2.5">
-                <CalendarDays className={`h-4 w-4 ${isNavActive('/leaves') ? 'text-blue-600' : 'text-slate-400 group-hover:text-slate-700'}`} />
-                <span>Time Off & Leaves</span>
-              </div>
-              {user.mustChangePassword && <Lock className="h-3 w-3 text-slate-400" />}
-            </button>
-
-            <button
-              onClick={() => navigateTo('/departments')}
-              className={`group flex w-full items-center justify-between rounded-xl px-3 py-2 text-xs font-semibold transition-all ${
-                isNavActive('/departments')
-                  ? 'bg-blue-50 text-blue-700 border border-blue-200 shadow-sm'
-                  : user.mustChangePassword
-                  ? 'text-slate-400 hover:bg-slate-50 cursor-not-allowed'
-                  : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
-              }`}
-            >
-              <div className="flex items-center gap-2.5">
-                <Building2 className={`h-4 w-4 ${isNavActive('/departments') ? 'text-blue-600' : 'text-slate-400 group-hover:text-slate-700'}`} />
-                <span>{user.role === 'admin' ? 'Departments & Squads' : 'Company Departments'}</span>
-              </div>
-              {user.mustChangePassword && <Lock className="h-3 w-3 text-slate-400" />}
-            </button>
+          {/* Navigation: Today */}
+          <div className="space-y-0.5">
+            <div className="px-2 mb-1.5 text-[10px] font-semibold tracking-wider uppercase text-slate-400 dark:text-slate-500" style={{ fontFamily: 'Archivo, sans-serif' }}>Today</div>
+            {([
+              { path: '/dashboard', label: 'Dashboard', Icon: LayoutDashboard, apis: ['/api/dashboard/stats'] },
+              { path: '/schedule',  label: 'Schedule',  Icon: Calendar,        apis: ['/api/schedule'] },
+            ] as { path: string; label: string; Icon: React.ElementType; apis?: string[] }[]).map(({ path, label, Icon, apis }) => (
+              <Link key={path} href={user.mustChangePassword ? '/profile?force=password' : path} prefetch={isProd} onMouseEnter={() => warmRoute(path, apis, router)} onTouchStart={() => warmRoute(path, apis, router)} onClick={() => setMobileMenuOpen(false)} className="rail-item w-full text-left flex items-center gap-3 transition-all rounded-xl"
+                style={getNavStyle(isNavActive(path))}>
+                <Icon className="h-4 w-4 shrink-0" style={getNavIconStyle(isNavActive(path))} />
+                <span className="flex-1 truncate">{label}</span>
+                {user.mustChangePassword && <Lock className="h-3 w-3 shrink-0" style={{ color: 'var(--muted)' }} />}
+              </Link>
+            ))}
           </div>
 
-          {/* Navigation Section 2: Productivity Suite */}
-          <div className="space-y-1">
-            <div className="px-2 text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1.5">
-              Productivity & Team
-            </div>
+          {/* Navigation: Work */}
+          <div className="space-y-0.5">
+            <div className="px-2 mb-1.5 text-[10px] font-semibold tracking-wider uppercase text-slate-400 dark:text-slate-500" style={{ fontFamily: 'Archivo, sans-serif' }}>Work</div>
 
-            <button
-              onClick={() => navigateTo('/tasks')}
-              className={`group flex w-full items-center justify-between rounded-xl px-3 py-2 text-xs font-semibold transition-all ${
-                isNavActive('/tasks')
-                  ? 'bg-blue-50 text-blue-700 border border-blue-200 shadow-sm'
-                  : user.mustChangePassword
-                  ? 'text-slate-400 hover:bg-slate-50 cursor-not-allowed'
-                  : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
-              }`}
-            >
-              <div className="flex items-center gap-2.5">
-                <CheckSquare className={`h-4 w-4 ${isNavActive('/tasks') ? 'text-blue-600' : 'text-slate-400 group-hover:text-slate-700'}`} />
-                <span>Tasks (Kanban)</span>
-              </div>
-              {user.mustChangePassword && <Lock className="h-3 w-3 text-slate-400" />}
-            </button>
+            <Link href={user.mustChangePassword ? '/profile?force=password' : '/tasks'} prefetch={isProd} onMouseEnter={() => warmRoute('/tasks', ['/api/tasks', '/api/employees'], router)} onTouchStart={() => warmRoute('/tasks', ['/api/tasks', '/api/employees'], router)} onClick={() => setMobileMenuOpen(false)} className="rail-item w-full text-left flex items-center gap-3 transition-all rounded-xl"
+              style={getNavStyle(isNavActive('/tasks'))}>
+              <CheckSquare className="h-4 w-4 shrink-0" style={getNavIconStyle(isNavActive('/tasks'))} />
+              <span className="flex-1 truncate">Tasks</span>
+              {pendingTaskCount > 0 && (
+                <span className="rounded-full px-2 py-0.5 text-[9px] font-extrabold bg-blue-950/80 text-blue-300 border border-blue-500/30">
+                  {pendingTaskCount > 99 ? '99+' : pendingTaskCount}
+                </span>
+              )}
+              {user.mustChangePassword && <Lock className="h-3 w-3 shrink-0" style={{ color: 'var(--muted)' }} />}
+            </Link>
 
-            <button
-              onClick={() => navigateTo('/schedule')}
-              className={`group flex w-full items-center justify-between rounded-xl px-3 py-2 text-xs font-semibold transition-all ${
-                isNavActive('/schedule')
-                  ? 'bg-blue-50 text-blue-700 border border-blue-200 shadow-sm'
-                  : user.mustChangePassword
-                  ? 'text-slate-400 hover:bg-slate-50 cursor-not-allowed'
-                  : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
-              }`}
-            >
-              <div className="flex items-center gap-2.5">
-                <Calendar className={`h-4 w-4 ${isNavActive('/schedule') ? 'text-blue-600' : 'text-slate-400 group-hover:text-slate-700'}`} />
-                <span>Schedule & Shifts</span>
-              </div>
-              {user.mustChangePassword && <Lock className="h-3 w-3 text-slate-400" />}
-            </button>
+            <Link href={user.mustChangePassword ? '/profile?force=password' : '/mail/inbox'} prefetch={isProd} onMouseEnter={() => warmRoute('/mail/inbox', ['/api/mail/inbox?limit=40'], router)} onTouchStart={() => warmRoute('/mail/inbox', ['/api/mail/inbox?limit=40'], router)} onClick={() => setMobileMenuOpen(false)} className="rail-item w-full text-left flex items-center gap-3 transition-all rounded-xl"
+              style={getNavStyle(isNavActive('/mail'))}>
+              <Inbox className="h-4 w-4 shrink-0" style={getNavIconStyle(isNavActive('/mail'))} />
+              <span className="flex-1 truncate">Mailbox</span>
+              {unreadCount > 0 && (
+                <span className="rounded-full px-2 py-0.5 text-[9px] font-extrabold bg-blue-950/80 text-blue-300 border border-blue-500/30">
+                  {unreadCount > 99 ? '99+' : unreadCount}
+                </span>
+              )}
+              {user.mustChangePassword && <Lock className="h-3 w-3 shrink-0" style={{ color: 'var(--muted)' }} />}
+            </Link>
 
-            <button
-              onClick={() => navigateTo('/notes')}
-              className={`group flex w-full items-center justify-between rounded-xl px-3 py-2 text-xs font-semibold transition-all ${
-                isNavActive('/notes')
-                  ? 'bg-blue-50 text-blue-700 border border-blue-200 shadow-sm'
-                  : user.mustChangePassword
-                  ? 'text-slate-400 hover:bg-slate-50 cursor-not-allowed'
-                  : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
-              }`}
-            >
-              <div className="flex items-center gap-2.5">
-                <StickyNote className={`h-4 w-4 ${isNavActive('/notes') ? 'text-blue-600' : 'text-slate-400 group-hover:text-slate-700'}`} />
-                <span>Personal Notes</span>
-              </div>
-              {user.mustChangePassword && <Lock className="h-3 w-3 text-slate-400" />}
-            </button>
+            {([
+              { path: '/notes',   label: 'Notes',         Icon: StickyNote, apis: ['/api/notes'] },
+              { path: '/drive',   label: 'Google Drive',  Icon: HardDrive,  apis: ['/api/drive'] },
+            ] as { path: string; label: string; Icon: React.ElementType; apis?: string[] }[]).map(({ path, label, Icon, apis }) => (
+              <Link key={path} href={user.mustChangePassword ? '/profile?force=password' : path} prefetch={isProd} onMouseEnter={() => warmRoute(path, apis, router)} onTouchStart={() => warmRoute(path, apis, router)} onClick={() => setMobileMenuOpen(false)} className="rail-item w-full text-left flex items-center gap-3 transition-all rounded-xl"
+                style={getNavStyle(isNavActive(path))}>
+                <Icon className="h-4 w-4 shrink-0" style={getNavIconStyle(isNavActive(path))} />
+                <span className="flex-1 truncate">{label}</span>
+                {user.mustChangePassword && <Lock className="h-3 w-3 shrink-0" style={{ color: 'var(--muted)' }} />}
+              </Link>
+            ))}
+          </div>
 
-            <button
-              onClick={() => navigateTo('/notices')}
-              className={`group flex w-full items-center justify-between rounded-xl px-3 py-2 text-xs font-semibold transition-all ${
-                isNavActive('/notices')
-                  ? 'bg-blue-50 text-blue-700 border border-blue-200 shadow-sm'
-                  : user.mustChangePassword
-                  ? 'text-slate-400 hover:bg-slate-50 cursor-not-allowed'
-                  : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
-              }`}
-            >
-              <div className="flex items-center gap-2.5">
-                <Megaphone className={`h-4 w-4 ${isNavActive('/notices') ? 'text-blue-600' : 'text-slate-400 group-hover:text-slate-700'}`} />
-                <span>Notice Board</span>
-              </div>
-              {user.mustChangePassword && <Lock className="h-3 w-3 text-slate-400" />}
-            </button>
+          {/* Navigation: People */}
+          <div className="space-y-0.5">
+            <div className="px-2 mb-1.5 text-[10px] font-semibold tracking-wider uppercase text-slate-400 dark:text-slate-500" style={{ fontFamily: 'Archivo, sans-serif' }}>People</div>
+            {([
+              ...(user.role === 'admin' || user.role === 'manager' || user.role === 'team_lead'
+                ? [{ path: '/employees', label: 'Directory', Icon: Users, apis: ['/api/employees', '/api/departments'] }]
+                : []),
+              { path: '/attendance',  label: 'Attendance',           Icon: Clock,        apis: ['/api/attendance', '/api/leaves'] },
+              { path: '/leaves',      label: 'Time Off',              Icon: CalendarDays, apis: ['/api/leaves'] },
+              { path: '/departments', label: 'Departments',          Icon: Building2,    apis: ['/api/departments'] },
+            ] as { path: string; label: string; Icon: React.ElementType; apis?: string[] }[]).map(({ path, label, Icon, apis }) => (
+              <Link key={path} href={user.mustChangePassword ? '/profile?force=password' : path} prefetch={isProd} onMouseEnter={() => warmRoute(path, apis, router)} onTouchStart={() => warmRoute(path, apis, router)} onClick={() => setMobileMenuOpen(false)} className="rail-item w-full text-left flex items-center gap-3 transition-all rounded-xl"
+                style={getNavStyle(isNavActive(path))}>
+                <Icon className="h-4 w-4 shrink-0" style={getNavIconStyle(isNavActive(path))} />
+                <span className="flex-1 truncate">{label}</span>
+                {user.mustChangePassword && <Lock className="h-3 w-3 shrink-0" style={{ color: 'var(--muted)' }} />}
+              </Link>
+            ))}
+          </div>
+
+          {/* Notices */}
+          <div className="space-y-0.5">
+            <Link href={user.mustChangePassword ? '/profile?force=password' : '/notices'} prefetch={isProd} onMouseEnter={() => warmRoute('/notices', ['/api/notices'], router)} onTouchStart={() => warmRoute('/notices', ['/api/notices'], router)} onClick={() => setMobileMenuOpen(false)} className="rail-item w-full text-left flex items-center gap-3 transition-all rounded-xl"
+              style={getNavStyle(isNavActive('/notices'))}>
+              <Megaphone className="h-4 w-4 shrink-0" style={getNavIconStyle(isNavActive('/notices'))} />
+              <span className="flex-1 truncate">Notices</span>
+              {user.mustChangePassword && <Lock className="h-3 w-3 shrink-0" style={{ color: 'var(--muted)' }} />}
+            </Link>
           </div>
 
           {/* Navigation Section 3: Admin Center */}
           {user.role === 'admin' && (
-            <div className="space-y-1">
-              <div className="px-2 text-[10px] font-bold uppercase tracking-widest text-purple-600 mb-1.5 flex items-center gap-1.5">
+            <div className="space-y-0.5">
+              <div className="px-2 mb-2 text-[10px] font-bold tracking-wider uppercase flex items-center gap-1.5" style={{ color: 'var(--muted)', fontFamily: 'Archivo, sans-serif' }}>
                 <Shield className="h-3 w-3" />
                 <span>Administration</span>
               </div>
 
-              <button
-                onClick={() => navigateTo('/admin')}
-                className={`group flex w-full items-center justify-between rounded-xl px-3 py-2 text-xs font-semibold transition-all ${
-                  pathname.startsWith('/admin')
-                    ? 'bg-purple-50 text-purple-700 border border-purple-200 shadow-sm'
-                    : user.mustChangePassword
-                    ? 'text-purple-400 hover:bg-purple-50/30 cursor-not-allowed'
-                    : 'text-purple-700 hover:bg-purple-50/60 hover:text-purple-900'
-                }`}
+              <Link
+                href={user.mustChangePassword ? '/profile?force=password' : '/admin'}
+                prefetch={isProd}
+                onMouseEnter={() => warmRoute('/admin', ['/api/admin/stats', '/api/admin/audit-logs'], router)}
+                onTouchStart={() => warmRoute('/admin', ['/api/admin/stats', '/api/admin/audit-logs'], router)}
+                onClick={() => setMobileMenuOpen(false)}
+                className="rail-item w-full text-left flex items-center gap-3 transition-all rounded-xl"
+                style={getNavStyle(pathname.startsWith('/admin'))}
               >
-                <div className="flex items-center gap-2.5">
-                  <Shield className="h-4 w-4 text-purple-600" />
-                  <span>Admin Center & Logs</span>
-                </div>
+                <Shield className="h-4 w-4 shrink-0" style={getNavIconStyle(pathname.startsWith('/admin'))} />
+                <span className="flex-1">Admin Center & Logs</span>
                 {user.mustChangePassword ? (
-                  <Lock className="h-3.5 w-3.5 text-purple-400" />
+                  <Lock className="h-3 w-3 shrink-0" style={{ color: 'var(--muted)' }} />
                 ) : (
-                  <ChevronRight className="h-3.5 w-3.5 text-purple-500 opacity-60 group-hover:opacity-100" />
+                  <ChevronRight className="h-3 w-3 shrink-0" style={{ color: 'var(--muted)' }} />
                 )}
-              </button>
+              </Link>
             </div>
           )}
         </div>
 
         {/* Sidebar Footer Status */}
-        <div className="pt-3 border-t border-slate-100">
-          <div className="flex items-center justify-between rounded-2xl bg-slate-50 p-2.5 border border-slate-200 shadow-sm">
-            <div className="flex items-center gap-2">
-              <span className="relative flex h-2.5 w-2.5">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500" />
-              </span>
-              <span className="text-[11px] font-semibold text-slate-700">Zero-Trust Active</span>
+        <div className="pt-3" style={{ borderTop: '1px solid var(--line-soft)' }}>
+          <div className="relative overflow-hidden rounded-xl p-3 border transition-colors" style={{ background: 'var(--surface-2)', borderColor: 'var(--line)' }}>
+            <svg className="absolute inset-0 w-full h-full opacity-15 pointer-events-none" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 80" preserveAspectRatio="none">
+              <path d="M-20,40 Q50,10 120,50 T240,30" fill="none" stroke="var(--teal)" strokeWidth="1.5" />
+              <path d="M-20,60 Q60,30 140,70 T240,50" fill="none" stroke="var(--teal)" strokeWidth="1" opacity="0.6" />
+            </svg>
+            <div className="flex items-center justify-between relative z-10">
+              <div className="flex items-center gap-2">
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75" style={{ background: 'var(--teal)' }} />
+                  <span className="relative inline-flex rounded-full h-2 w-2 shadow-xs" style={{ background: 'var(--teal)' }} />
+                </span>
+                <span className="text-xs font-bold tracking-wide" style={{ color: 'var(--teal)' }}>Zero-Trust Active</span>
+              </div>
+              <span className="text-[10px] font-mono" style={{ color: 'var(--muted)' }}>v1.2</span>
             </div>
-            <span className="text-[10px] font-mono text-slate-400">v1.2</span>
           </div>
         </div>
       </aside>
 
       {/* Main Content Body with Topbar */}
-      <div className="flex flex-1 flex-col overflow-hidden bg-[#F8FAFC]">
+      <div className="flex flex-1 flex-col overflow-hidden" style={{ background: 'var(--paper)' }}>
         {/* Top Omnibar Header */}
-        <header className="flex h-16 shrink-0 items-center justify-between border-b border-slate-200 px-4 sm:px-6 bg-white/95 backdrop-blur-xl z-30 shadow-xs">
+        <header className="flex h-14 shrink-0 items-center justify-between px-4 sm:px-6 z-30" style={{ background: 'var(--surface)', borderBottom: '1px solid var(--line)' }}>
           <div className="flex items-center gap-3 min-w-0">
             <button
+              type="button"
               onClick={() => setMobileMenuOpen(true)}
-              className="rounded-xl border border-slate-200 p-2 text-slate-600 hover:bg-slate-50 md:hidden"
+              className="flex items-center justify-center rounded-xl p-2 md:hidden touch-manipulation min-h-[40px] min-w-[40px] cursor-pointer active:scale-95 transition-transform"
+              style={{ border: '1px solid var(--line)', color: 'var(--ink)', background: 'var(--surface)' }}
+              aria-label="Open Navigation Menu"
             >
               <Menu className="h-5 w-5" />
             </button>
 
+            {/* Mobile Brand Logo */}
+            <div className="flex items-center gap-2 md:hidden">
+              <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg p-0.5 shadow-xs" style={{ background: 'var(--surface-2)', border: '1px solid var(--line)' }}>
+                <img src="/cruvels-logo-transparent.png" alt="Cruvels" className="h-5 w-5 object-contain" />
+              </div>
+              <span className="text-sm font-bold tracking-tight" style={{ fontFamily: 'Bricolage Grotesque, sans-serif', color: 'var(--ink)' }}>
+                Cruvels OS
+              </span>
+            </div>
+
             {/* Global Search Bar */}
-            <form onSubmit={handleSearchSubmit} className="relative w-48 sm:w-64 md:w-72 hidden sm:block">
-              <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400">
+            <form onSubmit={handleSearchSubmit} className="relative w-56 sm:w-80 md:w-96 hidden sm:block">
+              <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3" style={{ color: 'var(--muted)' }}>
                 <Search className="h-3.5 w-3.5" />
               </div>
               <input
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search portal..."
-                className="w-full rounded-xl border border-slate-200 bg-slate-50 py-1.5 pl-8 pr-3 text-xs font-medium text-slate-900 placeholder-slate-400 focus:border-blue-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all"
+                placeholder="Search anything... (e.g. users, mailboxes, tasks)"
+                style={{
+                  border: '1px solid var(--line)',
+                  background: 'var(--paper)',
+                  color: 'var(--ink)',
+                  fontFamily: 'Archivo, sans-serif',
+                }}
+                className="w-full rounded-xl py-1.5 pl-8 pr-3 text-xs font-medium placeholder:text-[var(--muted)] focus:outline-none focus:ring-2 focus:ring-[var(--teal)] transition-all"
               />
             </form>
           </div>
 
-          {/* Center / Right: Top Bar Mail Navigation & User Profile Menu */}
+          {/* Center / Right: Global Actions (Sync, Theme Changer, Notifications, Profile) */}
           <div className="flex items-center gap-2 sm:gap-3">
-            {/* Top Bar Mail Quick Access Group */}
-            <div className="flex items-center rounded-2xl bg-slate-100 p-1 border border-slate-200 text-xs font-bold">
-              <button
-                onClick={() => navigateTo('/mail/inbox')}
-                className={`flex items-center gap-1.5 rounded-xl px-2.5 sm:px-3 py-1.5 transition-all ${
-                  isMailActive('/mail/inbox')
-                    ? 'bg-white text-blue-700 shadow-sm border border-slate-200/60'
-                    : user.mustChangePassword
-                    ? 'text-slate-400 cursor-not-allowed'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
-                title="Mail Inbox"
-              >
-                <Inbox className="h-3.5 w-3.5 text-blue-600" />
-                <span className="hidden sm:inline">Inbox</span>
-                {unreadCount > 0 && (
-                  <span className="rounded-full bg-blue-600 px-1.5 py-0.2 text-[9px] font-extrabold text-white">
-                    {unreadCount}
-                  </span>
-                )}
-              </button>
-
-              <button
-                onClick={() => navigateTo('/mail/sent')}
-                className={`flex items-center gap-1.5 rounded-xl px-2.5 sm:px-3 py-1.5 transition-all ${
-                  isMailActive('/mail/sent')
-                    ? 'bg-white text-blue-700 shadow-sm border border-slate-200/60'
-                    : user.mustChangePassword
-                    ? 'text-slate-400 cursor-not-allowed'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
-                title="Sent Mail"
-              >
-                <Send className="h-3.5 w-3.5 text-indigo-600" />
-                <span className="hidden sm:inline">Sent</span>
-              </button>
-
-              <button
-                onClick={() => navigateTo('/mail/drafts')}
-                className={`flex items-center gap-1.5 rounded-xl px-2.5 sm:px-3 py-1.5 transition-all ${
-                  isMailActive('/mail/drafts')
-                    ? 'bg-white text-blue-700 shadow-sm border border-slate-200/60'
-                    : user.mustChangePassword
-                    ? 'text-slate-400 cursor-not-allowed'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
-                title="Drafts"
-              >
-                <FileText className="h-3.5 w-3.5 text-purple-600" />
-                <span className="hidden sm:inline">Drafts</span>
-              </button>
-
-              <button
-                onClick={() => navigateTo('/mail/spam')}
-                className={`flex items-center gap-1.5 rounded-xl px-2.5 sm:px-3 py-1.5 transition-all ${
-                  isMailActive('/mail/spam')
-                    ? 'bg-white text-amber-700 shadow-sm border border-slate-200/60'
-                    : user.mustChangePassword
-                    ? 'text-slate-400 cursor-not-allowed'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
-                title="Spam Quarantine"
-              >
-                <ShieldAlert className="h-3.5 w-3.5 text-amber-600" />
-                <span className="hidden sm:inline">Spam</span>
-              </button>
-
-              <button
-                onClick={() => navigateTo('/mail/trash')}
-                className={`flex items-center gap-1.5 rounded-xl px-2.5 sm:px-3 py-1.5 transition-all ${
-                  isMailActive('/mail/trash')
-                    ? 'bg-white text-rose-700 shadow-sm border border-slate-200/60'
-                    : user.mustChangePassword
-                    ? 'text-slate-400 cursor-not-allowed'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
-                title="Trash Mailbox"
-              >
-                <Trash2 className="h-3.5 w-3.5 text-rose-600" />
-                <span className="hidden sm:inline">Trash</span>
-              </button>
-
-              <button
-                onClick={() => navigateTo('/mail/compose')}
-                className={`flex items-center gap-1.5 rounded-xl px-2.5 sm:px-3 py-1.5 transition-all ${
-                  isMailActive('/mail/compose')
-                    ? 'bg-blue-600 text-white shadow-sm'
-                    : user.mustChangePassword
-                    ? 'bg-slate-300 text-slate-500 cursor-not-allowed shadow-none'
-                    : 'bg-blue-600/90 text-white hover:bg-blue-600 shadow-xs'
-                }`}
-                title="Compose Email"
-              >
-                <PenSquare className="h-3.5 w-3.5 text-white" />
-                <span className="hidden md:inline">Compose</span>
-              </button>
-            </div>
 
             {/* Manual Sync Button */}
             <button
+              type="button"
               onClick={handleManualSync}
               disabled={syncing}
-              className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 shadow-xs transition-all"
+              className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium transition-all touch-manipulation cursor-pointer active:scale-95 min-h-[38px]"
+              style={{ border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--ink)' }}
               title="Sync Inbox & Feeds"
             >
-              <RefreshCw className={`h-3.5 w-3.5 ${syncing ? 'animate-spin text-blue-600' : 'text-slate-500'}`} />
+              <RefreshCw className={`h-3.5 w-3.5 ${syncing ? 'animate-spin' : ''}`} style={{ color: syncing ? 'var(--teal)' : 'var(--muted)' }} />
               <span className="hidden lg:inline">{syncing ? 'Syncing...' : 'Sync'}</span>
             </button>
+
+            {/* Theme Toggle */}
+            <ThemeToggle />
 
             {/* Real-time Notification Bell Popover */}
             <div className="relative" ref={notifDropdownRef}>
               <button
+                type="button"
                 onClick={() => setNotifDropdownOpen(!notifDropdownOpen)}
-                className="relative flex items-center justify-center h-9 w-9 rounded-2xl border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:text-slate-900 shadow-xs transition-all"
+                className="relative flex items-center justify-center h-10 w-10 sm:h-9 sm:w-9 rounded-xl transition-all touch-manipulation cursor-pointer active:scale-95"
+                style={{ border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--ink)' }}
                 title="Notifications & Alerts"
+                aria-label="Notifications"
               >
-                <Bell className="h-4 w-4 text-slate-600" />
+                <Bell className="h-4 w-4" />
                 {notifUnreadCount > 0 && (
-                  <span className="absolute -top-1 -right-1 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-rose-600 px-1 text-[9px] font-extrabold text-white shadow-xs animate-pulse">
+                  <span className="absolute -top-1 -right-1 flex h-4 min-w-[16px] items-center justify-center rounded-full px-1 text-[9px] font-extrabold text-white animate-pulse" style={{ background: 'var(--amber)' }}>
                     {notifUnreadCount}
                   </span>
                 )}
@@ -920,19 +906,32 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
               {/* Notification Center Popover */}
               {notifDropdownOpen && (
-                <div className="fixed sm:absolute right-3 sm:right-0 top-16 sm:top-auto sm:mt-2 w-[calc(100vw-24px)] sm:w-96 rounded-3xl bg-white shadow-2xl border border-slate-200 z-50 animate-in fade-in slide-in-from-top-2 overflow-hidden">
+                <div className="fixed sm:absolute right-3 sm:right-0 top-16 sm:top-auto sm:mt-2 w-[calc(100vw-24px)] sm:w-96 rounded-xl z-50 animate-in fade-in slide-in-from-top-2 overflow-hidden" style={{ background: 'var(--surface)', border: '1px solid var(--line)', boxShadow: '0 8px 32px -4px rgba(18,32,42,0.16)' }}>
                   {/* Popover Header */}
-                  <div className="flex items-center justify-between border-b border-slate-100 p-4 bg-slate-50/50">
+                  <div className="flex items-center justify-between p-4" style={{ borderBottom: '1px solid var(--line)' }}>
                     <div className="flex items-center gap-2">
-                      <Bell className="h-4 w-4 text-blue-600" />
-                      <h3 className="text-xs font-bold text-slate-900">Notifications</h3>
+                      <Bell className="h-4 w-4" style={{ color: 'var(--teal)' }} />
+                      <h3 className="text-xs font-bold" style={{ fontFamily: 'Bricolage Grotesque, sans-serif', color: 'var(--ink)' }}>Notifications</h3>
                       {notifUnreadCount > 0 && (
-                        <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-extrabold text-blue-700">
+                        <span className="rounded px-2 py-0.5 text-[10px] font-bold" style={{ background: 'var(--teal-dim)', color: 'var(--teal)' }}>
                           {notifUnreadCount} new
                         </span>
                       )}
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setNotifDropdownOpen(false);
+                          navigateTo('/profile/preferences');
+                        }}
+                        className="p-1 rounded-md transition-colors hover:bg-black/5 dark:hover:bg-white/5"
+                        style={{ color: 'var(--muted)' }}
+                        title="Notification & Alert Preferences"
+                      >
+                        <Settings className="h-3.5 w-3.5" />
+                      </button>
+
                       <button
                         type="button"
                         onClick={(e) => {
@@ -940,17 +939,20 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                           unlockAudioContext();
                           playNotificationSound();
                         }}
-                        className="flex items-center gap-1 rounded-lg bg-blue-50 px-2 py-1 text-[11px] font-bold text-blue-700 hover:bg-blue-100 transition-colors border border-blue-200 cursor-pointer shadow-2xs"
+                        className="flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium cursor-pointer transition-colors"
+                        style={{ background: 'var(--teal-dim)', color: 'var(--teal)', border: '1px solid var(--line)' }}
                         title="Play notification sound test"
                       >
-                        <Volume2 className="h-3 w-3 text-blue-600" />
-                        <span>Test Sound</span>
+                        <Volume2 className="h-3 w-3" />
+                        <span>Test</span>
                       </button>
+
                       {notifUnreadCount > 0 && (
                         <button
                           type="button"
                           onClick={handleMarkAllNotifsRead}
-                          className="text-[11px] font-semibold text-blue-600 hover:text-blue-800 transition-colors cursor-pointer"
+                          className="text-[11px] font-semibold transition-colors cursor-pointer"
+                          style={{ color: 'var(--teal)' }}
                         >
                           Mark all read
                         </button>
@@ -960,36 +962,35 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
                   {/* Device Notification Link Banner */}
                   {devicePermission !== 'granted' && (
-                    <div className="border-b border-amber-200 bg-amber-50/80 p-3 text-xs flex items-center justify-between gap-2">
-                      <div className="text-[11px] text-amber-900 font-medium leading-tight">
+                    <div className="p-3 text-xs flex items-center justify-between gap-2" style={{ borderBottom: '1px solid var(--line)', background: 'var(--amber-dim)' }}>
+                      <div className="text-[11px] font-medium leading-tight" style={{ color: 'var(--ink)' }}>
                         Receive instant alerts on this device for emails and tasks.
                       </div>
                       <button
                         onClick={requestDeviceNotifications}
-                        className="shrink-0 rounded-xl bg-amber-600 px-2.5 py-1 text-[10px] font-bold text-white shadow-xs hover:bg-amber-700 transition-all"
+                        className="shrink-0 rounded-md px-2.5 py-1 text-[10px] font-bold text-white transition-all"
+                        style={{ background: 'var(--amber)' }}
                       >
                         Link Device
                       </button>
                     </div>
                   )}
 
-                  {/* Filter Tabs */}
-                  <div className="flex items-center gap-1 border-b border-slate-100 p-2 overflow-x-auto text-[11px]">
+                  {/* Quick Filter Tabs (§ 10.3) */}
+                  <div className="flex items-center gap-1 p-2 overflow-x-auto text-[11px]" style={{ borderBottom: '1px solid var(--line)' }}>
                     {[
                       { id: 'all', label: 'All' },
-                      { id: 'mail', label: 'Emails' },
+                      { id: 'unread', label: 'Unread' },
+                      { id: 'action', label: 'Action Needed' },
+                      { id: 'compliance', label: 'Compliance' },
                       { id: 'task', label: 'Tasks' },
-                      { id: 'notice', label: 'Notices' },
-                      { id: 'leave', label: 'Leaves' },
+                      { id: 'mail', label: 'Emails' },
                     ].map((tab) => (
                       <button
                         key={tab.id}
                         onClick={() => setNotifCategoryFilter(tab.id)}
-                        className={`rounded-xl px-2.5 py-1 font-semibold transition-all whitespace-nowrap ${
-                          notifCategoryFilter === tab.id
-                            ? 'bg-blue-50 text-blue-700 border border-blue-200'
-                            : 'text-slate-500 hover:bg-slate-100 hover:text-slate-800'
-                        }`}
+                        className="rounded-md px-2.5 py-1 font-medium transition-all whitespace-nowrap"
+                        style={notifCategoryFilter === tab.id ? { background: 'var(--teal-dim)', color: 'var(--teal)', fontWeight: 600 } : { color: 'var(--muted)' }}
                       >
                         {tab.label}
                       </button>
@@ -997,58 +998,108 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                   </div>
 
                   {/* Notification List */}
-                  <div className="max-h-80 overflow-y-auto divide-y divide-slate-100">
+                  <div className="max-h-80 overflow-y-auto">
                     {notifications.filter((n) => {
                       if (notifCategoryFilter === 'all') return true;
+                      if (notifCategoryFilter === 'unread') return !n.is_read;
+                      if (notifCategoryFilter === 'action') {
+                        return n.state === 'action_required' || Boolean(n.action_url) || n.category?.includes('action') || n.category?.includes('acknowledgement');
+                      }
+                      if (notifCategoryFilter === 'compliance') {
+                        return n.category?.includes('attendance') || n.category?.includes('compliance') || n.category?.includes('acknowledgement');
+                      }
+                      if (notifCategoryFilter === 'task') return n.type === 'task';
+                      if (notifCategoryFilter === 'mail') return n.type === 'mail';
+                      if (notifCategoryFilter === 'notice') return n.type === 'notice';
                       if (notifCategoryFilter === 'leave') return n.type.startsWith('leave');
-                      return n.type === notifCategoryFilter;
+                      return true;
                     }).length === 0 ? (
-                      <div className="p-8 text-center text-xs text-slate-400">
-                        <Bell className="mx-auto h-6 w-6 text-slate-300 mb-2" />
+                      <div className="p-8 text-center text-xs" style={{ color: 'var(--muted)' }}>
+                        <Bell className="mx-auto h-6 w-6 mb-2" style={{ color: 'var(--line)' }} />
                         No notifications in this category.
                       </div>
                     ) : (
                       notifications
                         .filter((n) => {
                           if (notifCategoryFilter === 'all') return true;
+                          if (notifCategoryFilter === 'unread') return !n.is_read;
+                          if (notifCategoryFilter === 'action') {
+                            return n.state === 'action_required' || Boolean(n.action_url) || n.category?.includes('action') || n.category?.includes('acknowledgement');
+                          }
+                          if (notifCategoryFilter === 'compliance') {
+                            return n.category?.includes('attendance') || n.category?.includes('compliance') || n.category?.includes('acknowledgement');
+                          }
+                          if (notifCategoryFilter === 'task') return n.type === 'task';
+                          if (notifCategoryFilter === 'mail') return n.type === 'mail';
+                          if (notifCategoryFilter === 'notice') return n.type === 'notice';
                           if (notifCategoryFilter === 'leave') return n.type.startsWith('leave');
-                          return n.type === notifCategoryFilter;
+                          return true;
                         })
                         .map((notif) => (
                           <div
                             key={notif.id}
                             onClick={() => handleNotificationClick(notif)}
-                            className={`flex items-start gap-3 p-3.5 hover:bg-slate-50 cursor-pointer transition-colors ${
-                              !notif.is_read ? 'bg-blue-50/40' : 'bg-white'
-                            }`}
+                            className="flex items-start gap-3 p-3.5 cursor-pointer transition-colors"
+                            style={{ background: !notif.is_read ? 'var(--teal-dim)' : 'transparent', borderBottom: '1px solid var(--line)' }}
                           >
-                            <div className="mt-0.5 shrink-0 rounded-xl bg-slate-100 p-2 border border-slate-200">
+                            <div className="mt-0.5 shrink-0 rounded-lg p-2" style={{ background: 'var(--surface-hover)', border: '1px solid var(--line)' }}>
                               {notif.type === 'mail' ? (
-                                <Inbox className="h-4 w-4 text-blue-600" />
+                                <Inbox className="h-4 w-4" style={{ color: 'var(--teal)' }} />
                               ) : notif.type === 'task' ? (
-                                <CheckSquare className="h-4 w-4 text-amber-600" />
+                                <CheckSquare className="h-4 w-4" style={{ color: 'var(--amber)' }} />
                               ) : notif.type === 'notice' ? (
-                                <Megaphone className="h-4 w-4 text-purple-600" />
+                                <Megaphone className="h-4 w-4" style={{ color: 'var(--teal)' }} />
                               ) : notif.type.startsWith('leave') ? (
-                                <CalendarDays className="h-4 w-4 text-emerald-600" />
+                                <CalendarDays className="h-4 w-4" style={{ color: 'var(--teal)' }} />
                               ) : (
-                                <Bell className="h-4 w-4 text-indigo-600" />
+                                <Bell className="h-4 w-4" style={{ color: 'var(--muted)' }} />
                               )}
                             </div>
 
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center justify-between gap-1">
-                                <span className={`text-xs font-bold truncate ${!notif.is_read ? 'text-slate-900' : 'text-slate-700'}`}>
+                                <span className="text-xs font-bold truncate" style={{ color: 'var(--ink)', fontFamily: 'Archivo, sans-serif' }}>
                                   {notif.title}
                                 </span>
                                 {!notif.is_read && (
-                                  <span className="h-2 w-2 rounded-full bg-blue-600 shrink-0" />
+                                  <span className="h-2 w-2 rounded-full shrink-0" style={{ background: 'var(--teal)' }} />
                                 )}
                               </div>
-                              <p className="text-[11px] text-slate-600 line-clamp-2 mt-0.5 leading-relaxed">
+                              <p className="text-[11px] line-clamp-2 mt-0.5 leading-relaxed" style={{ color: 'var(--muted)' }}>
                                 {notif.message}
                               </p>
-                              <span className="text-[10px] text-slate-400 mt-1 block font-mono">
+
+                              {/* Direct Action Button on Notification Card (§ 10.2) */}
+                              {(notif.action_url || notif.link_url || notif.state === 'action_required') && (
+                                <div className="mt-2.5 flex items-center justify-between gap-2 pt-1.5 border-t border-dashed border-black/10 dark:border-white/10">
+                                  <span
+                                    className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                                      notif.state === 'action_required'
+                                        ? 'bg-amber-500/15 text-amber-700 dark:text-amber-300'
+                                        : notif.state === 'acknowledged'
+                                        ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300'
+                                        : 'text-muted'
+                                    }`}
+                                  >
+                                    {notif.state === 'action_required' ? 'Action Required' : notif.state === 'acknowledged' ? '✓ Acknowledged' : 'Update Available'}
+                                  </span>
+
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleNotificationClick(notif);
+                                    }}
+                                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-semibold text-white shadow-xs transition"
+                                    style={{ background: 'var(--teal)' }}
+                                  >
+                                    <span>{notif.action_label || 'View'}</span>
+                                    <ArrowUpRight className="w-3 h-3" />
+                                  </button>
+                                </div>
+                              )}
+
+                              <span className="text-[10px] mt-1.5 block" style={{ color: 'var(--muted)', fontFamily: 'Archivo, sans-serif' }}>
                                 {new Date(notif.created_at).toLocaleTimeString([], {
                                   hour: '2-digit',
                                   minute: '2-digit',
@@ -1066,32 +1117,35 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             {/* User Profile & Account Dropdown */}
             <div className="relative" ref={dropdownRef}>
               <button
+                type="button"
                 onClick={() => setProfileDropdownOpen(!profileDropdownOpen)}
-                className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-white p-1.5 pr-2.5 hover:border-slate-300 hover:bg-slate-50/80 shadow-xs transition-all text-left"
+                className="flex items-center gap-2 rounded-xl p-1.5 pr-2.5 transition-all text-left touch-manipulation cursor-pointer active:scale-95 min-h-[40px]"
+                style={{ border: '1px solid var(--line)', background: 'var(--surface)' }}
+                aria-label="User Account Menu"
               >
-                <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 text-xs font-bold text-white shadow-sm">
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg text-xs font-bold text-white shrink-0" style={{ background: 'var(--teal)', fontFamily: 'Bricolage Grotesque, sans-serif' }}>
                   {user.name.charAt(0).toUpperCase()}
                 </div>
                 <div className="hidden sm:block min-w-0">
-                  <div className="text-xs font-bold text-slate-900 truncate leading-tight flex items-center gap-1">
+                  <div className="text-xs font-semibold truncate leading-tight" style={{ color: 'var(--ink)', fontFamily: 'Archivo, sans-serif' }}>
                     {user.name}
                   </div>
-                  <div className="text-[10px] text-slate-500 truncate font-mono">{user.primaryAlias}</div>
+                  <div className="text-[10px] truncate" style={{ color: 'var(--muted)', fontFamily: 'Archivo, sans-serif' }}>{user.primaryAlias}</div>
                 </div>
-                <ChevronDown className={`h-3.5 w-3.5 text-slate-400 transition-transform ${profileDropdownOpen ? 'rotate-180' : ''}`} />
+                <ChevronDown className={`h-3.5 w-3.5 transition-transform shrink-0 ${profileDropdownOpen ? 'rotate-180' : ''}`} style={{ color: 'var(--muted)' }} />
               </button>
 
               {/* Profile Dropdown Menu */}
               {profileDropdownOpen && (
-                <div className="absolute right-0 mt-2 w-64 rounded-3xl bg-white p-2.5 shadow-2xl border border-slate-200 z-50 animate-in fade-in slide-in-from-top-2">
-                  <div className="px-3 py-2.5 border-b border-slate-100">
-                    <p className="text-xs font-bold text-slate-900">{user.name}</p>
-                    <p className="text-[11px] font-mono text-slate-500 truncate mt-0.5">{user.primaryAlias}</p>
+                <div className="absolute right-0 mt-2 w-64 rounded-xl p-2.5 z-50 animate-in fade-in slide-in-from-top-2" style={{ background: 'var(--surface)', border: '1px solid var(--line)', boxShadow: '0 8px 24px -4px rgba(18,32,42,0.14)' }}>
+                  <div className="px-3 py-2.5" style={{ borderBottom: '1px solid var(--line)' }}>
+                    <p className="text-xs font-bold" style={{ color: 'var(--ink)', fontFamily: 'Bricolage Grotesque, sans-serif' }}>{user.name}</p>
+                    <p className="text-[11px] truncate mt-0.5" style={{ color: 'var(--muted)', fontFamily: 'Archivo, sans-serif' }}>{user.primaryAlias}</p>
                     <div className="mt-2 flex items-center gap-1.5">
-                      <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-bold text-blue-700 uppercase tracking-wider border border-blue-200">
+                      <span className="rounded px-2 py-0.5 text-[10px] font-semibold" style={{ background: 'var(--teal-dim)', color: 'var(--teal)' }}>
                         {user.role}
                       </span>
-                      <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 border border-emerald-200">
+                      <span className="rounded px-2 py-0.5 text-[10px] font-semibold" style={{ background: 'var(--teal-dim)', color: 'var(--teal)' }}>
                         Active
                       </span>
                     </div>
@@ -1099,36 +1153,48 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
                   <div className="py-1 space-y-0.5 text-xs">
                     <button
+                      type="button"
                       onClick={() => {
                         setProfileDropdownOpen(false);
                         router.push('/profile');
                       }}
-                      className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 font-medium text-slate-700 hover:bg-slate-100 hover:text-slate-900 transition-colors"
+                      className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 font-medium transition-colors touch-manipulation cursor-pointer min-h-[38px]"
+                      style={{ color: 'var(--ink)' }}
+                      onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface-hover)')}
+                      onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
                     >
-                      <UserIcon className="h-4 w-4 text-slate-500" />
+                      <UserIcon className="h-4 w-4" style={{ color: 'var(--muted)' }} />
                       <span>Edit My Profile</span>
                     </button>
 
                     {user.role === 'admin' && (
                       <button
+                        type="button"
                         onClick={() => {
                           setProfileDropdownOpen(false);
                           router.push('/admin');
                         }}
-                        className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 font-medium text-purple-700 hover:bg-purple-50 transition-colors"
+                        className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 font-medium transition-colors touch-manipulation cursor-pointer min-h-[38px]"
+                        style={{ color: 'var(--amber)' }}
+                        onMouseEnter={e => (e.currentTarget.style.background = 'var(--amber-dim)')}
+                        onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
                       >
-                        <Shield className="h-4 w-4 text-purple-600" />
+                        <Shield className="h-4 w-4" />
                         <span>Admin Maintenance</span>
                       </button>
                     )}
                   </div>
 
-                  <div className="pt-1 border-t border-slate-100">
+                  <div className="pt-1" style={{ borderTop: '1px solid var(--line)' }}>
                     <button
+                      type="button"
                       onClick={handleLogout}
-                      className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-semibold text-rose-600 hover:bg-rose-50 transition-colors"
+                      className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-xs font-semibold transition-colors touch-manipulation cursor-pointer min-h-[38px]"
+                      style={{ color: '#e05252' }}
+                      onMouseEnter={e => (e.currentTarget.style.background = 'rgba(224,82,82,0.08)')}
+                      onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
                     >
-                      <LogOut className="h-4 w-4 text-rose-500" />
+                      <LogOut className="h-4 w-4" />
                       <span>Sign Out</span>
                     </button>
                   </div>
@@ -1140,13 +1206,16 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
         {/* Sync Notification Banner */}
         {syncMessage && (
-          <div className="bg-blue-600 px-4 py-1.5 text-center text-xs font-medium text-white shadow-inner animate-in fade-in">
+          <div className="px-4 py-1.5 text-center text-xs font-medium text-white animate-in fade-in" style={{ background: 'var(--teal)' }}>
             {syncMessage}
           </div>
         )}
 
         {/* Main Routed Page Area */}
-        <main className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-8">{children}</main>
+        <main className="flex-1 overflow-y-auto p-4 pb-24 sm:p-6 sm:pb-24 md:p-8 md:pb-8" style={{ background: 'var(--paper)' }}>{children}</main>
+
+        {/* Mobile Bottom Navigation Bar (Roadmap § 26) */}
+        <MobileBottomNav unreadCount={unreadCount} pendingTaskCount={pendingTaskCount} />
       </div>
     </div>
   );

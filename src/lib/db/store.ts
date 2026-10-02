@@ -14,6 +14,10 @@ import {
   CreateEmployeeInput,
   AttendanceRecord,
   AttendanceStatus,
+  AttendanceRuleConfig,
+  DEFAULT_ATTENDANCE_RULES,
+  AttendanceCorrectionRequest,
+  AttendanceCorrectionStatus,
   LeaveRequest,
   LeaveStatus,
   LeaveBalances,
@@ -21,9 +25,26 @@ import {
   ScheduleEvent,
   Note,
   TaskItem,
+  TaskComment,
+  TaskAttachment,
   AppNotification,
   PushSubscriptionItem,
   UserCalendarIntegration,
+  UniversalAcknowledgement,
+  AcknowledgementItemType,
+  AcknowledgementStatus,
+  AcknowledgementSummary,
+  NotificationState,
+  NotificationPreference,
+  DEFAULT_NOTIFICATION_PREFERENCES,
+  DriveResource,
+  DriveSection,
+  DriveFileType,
+  SystemSettings,
+  DEFAULT_SYSTEM_SETTINGS,
+  PublicHolidayDefinition,
+  INDIAN_HOLIDAYS_2026,
+  MailReminder,
 } from './types';
 
 import { hashPassword, verifyPassword } from '../auth/password';
@@ -45,6 +66,7 @@ const SEED_USERS: User[] = [
     password_hash: hashPassword('Password123!', DEV_SEED_SALT),
     role: 'admin',
     status: 'active',
+    must_change_password: true,
     created_at: new Date('2026-01-01T00:00:00Z').toISOString(),
     updated_at: new Date('2026-01-01T00:00:00Z').toISOString(),
   },
@@ -56,6 +78,7 @@ const SEED_USERS: User[] = [
     password_hash: hashPassword('Password123!', DEV_SEED_SALT),
     role: 'admin',
     status: 'active',
+    must_change_password: true,
     created_at: new Date('2026-01-01T00:00:00Z').toISOString(),
     updated_at: new Date('2026-01-01T00:00:00Z').toISOString(),
   },
@@ -67,6 +90,7 @@ const SEED_USERS: User[] = [
     password_hash: hashPassword('Password123!', DEV_SEED_SALT),
     role: 'admin',
     status: 'active',
+    must_change_password: true,
     created_at: new Date('2026-01-01T00:00:00Z').toISOString(),
     updated_at: new Date('2026-01-01T00:00:00Z').toISOString(),
   },
@@ -78,6 +102,7 @@ const SEED_USERS: User[] = [
     password_hash: hashPassword('Password123!', DEV_SEED_SALT),
     role: 'admin',
     status: 'active',
+    must_change_password: true,
     created_at: new Date('2026-01-01T00:00:00Z').toISOString(),
     updated_at: new Date('2026-01-01T00:00:00Z').toISOString(),
   },
@@ -89,6 +114,7 @@ const SEED_USERS: User[] = [
     password_hash: hashPassword('Password123!', DEV_SEED_SALT),
     role: 'admin',
     status: 'active',
+    must_change_password: true,
     created_at: new Date('2026-01-01T00:00:00Z').toISOString(),
     updated_at: new Date('2026-01-01T00:00:00Z').toISOString(),
   },
@@ -100,10 +126,11 @@ const SEED_USERS: User[] = [
     password_hash: hashPassword('Password123!', DEV_SEED_SALT),
     role: 'admin',
     status: 'active',
+    must_change_password: true,
     created_at: new Date('2026-01-01T00:00:00Z').toISOString(),
     updated_at: new Date('2026-01-01T00:00:00Z').toISOString(),
   },
-  // 7. Rahul (Intern)
+  // 7. Rahul Sharma (Software Engineering Intern)
   {
     id: 'a0000000-0000-0000-0000-000000000007',
     name: 'Rahul Sharma',
@@ -111,10 +138,11 @@ const SEED_USERS: User[] = [
     password_hash: hashPassword('Password123!', DEV_SEED_SALT),
     role: 'intern',
     status: 'active',
+    must_change_password: false,
     created_at: new Date('2026-01-01T00:00:00Z').toISOString(),
     updated_at: new Date('2026-01-01T00:00:00Z').toISOString(),
   },
-  // 8. Priya (Intern)
+  // 8. Priya Patel (UI/UX Design Intern)
   {
     id: 'a0000000-0000-0000-0000-000000000008',
     name: 'Priya Patel',
@@ -122,50 +150,79 @@ const SEED_USERS: User[] = [
     password_hash: hashPassword('Password123!', DEV_SEED_SALT),
     role: 'intern',
     status: 'active',
+    must_change_password: false,
     created_at: new Date('2026-01-01T00:00:00Z').toISOString(),
     updated_at: new Date('2026-01-01T00:00:00Z').toISOString(),
   },
-  // 9. Sales Intern
+  // 9. Ananya Reddy (Frontend Development Intern)
   {
     id: 'a0000000-0000-0000-0000-000000000009',
+    name: 'Ananya Reddy',
+    username: 'ananya',
+    password_hash: hashPassword('Password123!', DEV_SEED_SALT),
+    role: 'intern',
+    status: 'active',
+    must_change_password: false,
+    created_at: new Date('2026-01-01T00:00:00Z').toISOString(),
+    updated_at: new Date('2026-01-01T00:00:00Z').toISOString(),
+  },
+  // 10. Aravind Kumar (Growth & Analytics Intern)
+  {
+    id: 'a0000000-0000-0000-0000-000000000010',
+    name: 'Aravind Kumar',
+    username: 'aravind',
+    password_hash: hashPassword('Password123!', DEV_SEED_SALT),
+    role: 'intern',
+    status: 'active',
+    must_change_password: false,
+    created_at: new Date('2026-01-01T00:00:00Z').toISOString(),
+    updated_at: new Date('2026-01-01T00:00:00Z').toISOString(),
+  },
+  // 11. Sales Intern
+  {
+    id: 'a0000000-0000-0000-0000-000000000011',
     name: 'Sales Intern',
     username: 'sales.intern',
     password_hash: hashPassword('Password123!', DEV_SEED_SALT),
     role: 'intern',
     status: 'active',
+    must_change_password: false,
     created_at: new Date('2026-01-01T00:00:00Z').toISOString(),
     updated_at: new Date('2026-01-01T00:00:00Z').toISOString(),
   },
-  // 10. HR Intern
+  // 12. HR Intern
   {
-    id: 'a0000000-0000-0000-0000-000000000010',
+    id: 'a0000000-0000-0000-0000-000000000012',
     name: 'HR Intern',
     username: 'hr.intern',
     password_hash: hashPassword('Password123!', DEV_SEED_SALT),
     role: 'intern',
     status: 'active',
+    must_change_password: false,
     created_at: new Date('2026-01-01T00:00:00Z').toISOString(),
     updated_at: new Date('2026-01-01T00:00:00Z').toISOString(),
   },
-  // 11. Tharun (Intern)
+  // 13. Tharun (Intern)
   {
-    id: 'a0000000-0000-0000-0000-000000000011',
+    id: 'a0000000-0000-0000-0000-000000000013',
     name: 'Tharun',
     username: 'tharun.intern',
     password_hash: hashPassword('Password123!', DEV_SEED_SALT),
     role: 'intern',
     status: 'active',
+    must_change_password: false,
     created_at: new Date('2026-01-01T00:00:00Z').toISOString(),
     updated_at: new Date('2026-01-01T00:00:00Z').toISOString(),
   },
-  // 12. Sugumaran (Intern)
+  // 14. Sugumaran (Intern)
   {
-    id: 'a0000000-0000-0000-0000-000000000012',
+    id: 'a0000000-0000-0000-0000-000000000014',
     name: 'Sugumaran',
     username: 'sugumaran.intern',
     password_hash: hashPassword('Password123!', DEV_SEED_SALT),
     role: 'intern',
     status: 'active',
+    must_change_password: false,
     created_at: new Date('2026-01-01T00:00:00Z').toISOString(),
     updated_at: new Date('2026-01-01T00:00:00Z').toISOString(),
   },
@@ -238,27 +295,41 @@ const SEED_ALIASES: MailAlias[] = [
   {
     id: 'b0000000-0000-0000-0000-000000000009',
     user_id: 'a0000000-0000-0000-0000-000000000009',
-    email_address: 'sales.intern@cruvels.com',
+    email_address: 'ananya@cruvels.com',
     is_active: true,
     created_at: new Date('2026-01-01T00:00:00Z').toISOString(),
   },
   {
     id: 'b0000000-0000-0000-0000-000000000010',
     user_id: 'a0000000-0000-0000-0000-000000000010',
-    email_address: 'hr.intern@cruvels.com',
+    email_address: 'aravind@cruvels.com',
     is_active: true,
     created_at: new Date('2026-01-01T00:00:00Z').toISOString(),
   },
   {
     id: 'b0000000-0000-0000-0000-000000000011',
     user_id: 'a0000000-0000-0000-0000-000000000011',
-    email_address: 'tharun.intern@cruvels.com',
+    email_address: 'sales.intern@cruvels.com',
     is_active: true,
     created_at: new Date('2026-01-01T00:00:00Z').toISOString(),
   },
   {
     id: 'b0000000-0000-0000-0000-000000000012',
     user_id: 'a0000000-0000-0000-0000-000000000012',
+    email_address: 'hr.intern@cruvels.com',
+    is_active: true,
+    created_at: new Date('2026-01-01T00:00:00Z').toISOString(),
+  },
+  {
+    id: 'b0000000-0000-0000-0000-000000000014',
+    user_id: 'a0000000-0000-0000-0000-000000000013',
+    email_address: 'tharun.intern@cruvels.com',
+    is_active: true,
+    created_at: new Date('2026-01-01T00:00:00Z').toISOString(),
+  },
+  {
+    id: 'b0000000-0000-0000-0000-000000000015',
+    user_id: 'a0000000-0000-0000-0000-000000000014',
     email_address: 'sugumaran.intern@cruvels.com',
     is_active: true,
     created_at: new Date('2026-01-01T00:00:00Z').toISOString(),
@@ -272,7 +343,7 @@ const SEED_DEPARTMENTS: Department[] = [
     code: 'ENG',
     head_name: 'Charith',
     description: 'Software development, infrastructure, and technical operations.',
-    employee_count: 5,
+    employee_count: 6,
     created_at: new Date('2026-01-01T00:00:00Z').toISOString(),
     updated_at: new Date('2026-01-01T00:00:00Z').toISOString(),
   },
@@ -302,7 +373,7 @@ const SEED_DEPARTMENTS: Department[] = [
     code: 'PROD',
     head_name: 'Admin Supervisor',
     description: 'Product strategy, UX research, and design systems.',
-    employee_count: 1,
+    employee_count: 2,
     created_at: new Date('2026-01-01T00:00:00Z').toISOString(),
     updated_at: new Date('2026-01-01T00:00:00Z').toISOString(),
   },
@@ -316,7 +387,7 @@ const SEED_GROUPS: Group[] = [
     department_name: 'Engineering & Technology',
     leader_id: 'emp-002',
     leader_name: 'Charith',
-    member_ids: ['emp-001', 'emp-002', 'emp-003', 'emp-004', 'emp-007', 'emp-008'],
+    member_ids: ['emp-001', 'emp-002', 'emp-003', 'emp-004', 'emp-007', 'emp-008', 'emp-009'],
     description: 'Core infrastructure, portal development, and engineering operations.',
     created_at: new Date('2026-01-01T00:00:00Z').toISOString(),
     updated_at: new Date('2026-01-01T00:00:00Z').toISOString(),
@@ -328,7 +399,7 @@ const SEED_GROUPS: Group[] = [
     department_name: 'Sales & Growth',
     leader_id: 'emp-005',
     leader_name: 'Harshith',
-    member_ids: ['emp-005', 'emp-006', 'emp-009'],
+    member_ids: ['emp-005', 'emp-006', 'emp-010'],
     description: 'Client acquisition, partnership management, and market expansion.',
     created_at: new Date('2026-01-01T00:00:00Z').toISOString(),
     updated_at: new Date('2026-01-01T00:00:00Z').toISOString(),
@@ -480,31 +551,33 @@ const SEED_EMPLOYEES: Employee[] = [
     created_at: new Date('2026-01-01T00:00:00Z').toISOString(),
     updated_at: new Date('2026-01-01T00:00:00Z').toISOString(),
   },
-  // 7. Rahul (Intern)
+  // 7. Rahul Sharma (Software Engineering Intern)
   {
     id: 'emp-007',
     user_id: 'a0000000-0000-0000-0000-000000000007',
-    employee_code: 'CRUV-007',
+    employee_code: 'CRUV-INT-001',
     first_name: 'Rahul',
     last_name: 'Sharma',
     name: 'Rahul Sharma',
     email: 'rahul@cruvels.com',
-    phone: '+91 98765 00006',
+    phone: '+91 98765 11001',
     department_id: 'dep-001',
     department_name: 'Engineering & Technology',
     group_id: 'grp-001',
     group_name: 'Core Platform Squad',
     is_group_leader: false,
     designation: 'Software Engineering Intern',
-    joining_date: '2026-01-01',
+    tagline: 'Full-stack Next.js & Distributed Systems',
+    personal_email: 'rahul.sharma@gmail.com',
+    joining_date: '2026-01-15',
     manager_id: 'emp-002',
     manager_name: 'Charith',
     status: 'ACTIVE',
-    leave_balances: { casual: 12, sick: 10, annual: 15, unpaid: 0 },
+    leave_balances: { casual: 6, sick: 4, annual: 0, unpaid: 0 },
     created_at: new Date('2026-01-01T00:00:00Z').toISOString(),
     updated_at: new Date('2026-01-01T00:00:00Z').toISOString(),
   },
-  // 8. Priya (Intern)
+  // 8. Priya Patel (UI/UX & Frontend Engineering Intern)
   {
     id: 'emp-008',
     user_id: 'a0000000-0000-0000-0000-000000000008',
@@ -513,114 +586,219 @@ const SEED_EMPLOYEES: Employee[] = [
     last_name: 'Patel',
     name: 'Priya Patel',
     email: 'priya@cruvels.com',
-    phone: '+91 98765 00007',
+    phone: '+91 98765 11002',
     department_id: 'dep-001',
     department_name: 'Engineering & Technology',
     group_id: 'grp-001',
     group_name: 'Core Platform Squad',
     is_group_leader: false,
-    designation: 'Frontend Engineering Intern',
+    designation: 'UI/UX & Frontend Engineering Intern',
+    tagline: 'Design Systems & Micro-Interactions',
+    personal_email: 'priya.patel@gmail.com',
     joining_date: '2026-01-01',
     manager_id: 'emp-002',
     manager_name: 'Charith',
     status: 'ACTIVE',
-    leave_balances: { casual: 12, sick: 10, annual: 15, unpaid: 0 },
+    leave_balances: { casual: 6, sick: 4, annual: 0, unpaid: 0 },
     created_at: new Date('2026-01-01T00:00:00Z').toISOString(),
     updated_at: new Date('2026-01-01T00:00:00Z').toISOString(),
   },
-  // 9. Sales Intern
+  // 9. Ananya Reddy (Frontend Development Intern)
   {
     id: 'emp-009',
     user_id: 'a0000000-0000-0000-0000-000000000009',
-    employee_code: 'CRUV-009',
-    first_name: 'Sales',
-    last_name: 'Intern',
-    name: 'Sales Intern',
-    email: 'sales.intern@cruvels.com',
-    phone: '+91 98765 00008',
+    employee_code: 'CRUV-INT-003',
+    first_name: 'Ananya',
+    last_name: 'Reddy',
+    name: 'Ananya Reddy',
+    email: 'ananya@cruvels.com',
+    phone: '+91 98765 11003',
+    department_id: 'dep-001',
+    department_name: 'Engineering & Technology',
+    group_id: 'grp-001',
+    group_name: 'Core Platform Squad',
+    is_group_leader: false,
+    designation: 'Frontend Development Intern',
+    tagline: 'React 19, TypeScript & Accessibility',
+    personal_email: 'ananya.reddy@gmail.com',
+    joining_date: '2026-01-20',
+    manager_id: 'emp-002',
+    manager_name: 'Charith',
+    status: 'ACTIVE',
+    leave_balances: { casual: 6, sick: 4, annual: 0, unpaid: 0 },
+    created_at: new Date('2026-01-01T00:00:00Z').toISOString(),
+    updated_at: new Date('2026-01-01T00:00:00Z').toISOString(),
+  },
+  // 10. Aravind Kumar (Growth & Analytics Intern)
+  {
+    id: 'emp-010',
+    user_id: 'a0000000-0000-0000-0000-000000000010',
+    employee_code: 'CRUV-INT-004',
+    first_name: 'Aravind',
+    last_name: 'Kumar',
+    name: 'Aravind Kumar',
+    email: 'aravind@cruvels.com',
+    phone: '+91 98765 11004',
     department_id: 'dep-003',
     department_name: 'Sales & Growth',
     group_id: 'grp-002',
     group_name: 'Growth & Outreach Squad',
     is_group_leader: false,
-    designation: 'Business Development Intern',
+    designation: 'Growth & Analytics Intern',
+    tagline: 'Market Telemetry & B2B Expansion',
+    personal_email: 'aravind.kumar@gmail.com',
+    joining_date: '2026-02-10',
+    manager_id: 'emp-005',
+    manager_name: 'Harshith',
+    status: 'ACTIVE',
+    leave_balances: { casual: 6, sick: 4, annual: 0, unpaid: 0 },
+    created_at: new Date('2026-01-01T00:00:00Z').toISOString(),
+    updated_at: new Date('2026-01-01T00:00:00Z').toISOString(),
+  },
+  // 11. Sales Intern
+  {
+    id: 'emp-011',
+    user_id: 'a0000000-0000-0000-0000-000000000011',
+    employee_code: 'CRUV-011',
+    first_name: 'Sales',
+    last_name: 'Intern',
+    name: 'Sales Intern',
+    email: 'sales.intern@cruvels.com',
+    phone: '+91 98765 00011',
+    department_id: 'dep-003',
+    department_name: 'Sales & Growth',
+    group_id: 'grp-002',
+    group_name: 'Growth & Outreach Squad',
+    is_group_leader: false,
+    designation: 'Sales & BD Intern',
     joining_date: '2026-01-01',
     manager_id: 'emp-005',
     manager_name: 'Harshith',
     status: 'ACTIVE',
-    leave_balances: { casual: 12, sick: 10, annual: 15, unpaid: 0 },
+    leave_balances: { casual: 6, sick: 4, annual: 0, unpaid: 0 },
     created_at: new Date('2026-01-01T00:00:00Z').toISOString(),
     updated_at: new Date('2026-01-01T00:00:00Z').toISOString(),
   },
-  // 10. HR Intern
+  // 12. HR Intern
   {
-    id: 'emp-010',
-    user_id: 'a0000000-0000-0000-0000-000000000010',
-    employee_code: 'CRUV-010',
+    id: 'emp-012',
+    user_id: 'a0000000-0000-0000-0000-000000000012',
+    employee_code: 'CRUV-012',
     first_name: 'HR',
     last_name: 'Intern',
     name: 'HR Intern',
     email: 'hr.intern@cruvels.com',
-    phone: '+91 98765 00009',
+    phone: '+91 98765 00012',
     department_id: 'dep-002',
     department_name: 'Human Resources & People Ops',
     group_id: null,
     group_name: null,
     is_group_leader: false,
-    designation: 'People Operations Intern',
+    designation: 'People Ops Intern',
     joining_date: '2026-01-01',
     manager_id: 'emp-001',
     manager_name: 'Admin Supervisor',
     status: 'ACTIVE',
-    leave_balances: { casual: 12, sick: 10, annual: 15, unpaid: 0 },
+    leave_balances: { casual: 6, sick: 4, annual: 0, unpaid: 0 },
     created_at: new Date('2026-01-01T00:00:00Z').toISOString(),
     updated_at: new Date('2026-01-01T00:00:00Z').toISOString(),
   },
-  // 11. Tharun (Intern)
+  // 13. Tharun (Intern)
   {
-    id: 'emp-011',
-    user_id: 'a0000000-0000-0000-0000-000000000011',
-    employee_code: 'CRUV-011',
+    id: 'emp-013',
+    user_id: 'a0000000-0000-0000-0000-000000000013',
+    employee_code: 'CRUV-013',
     first_name: 'Tharun',
     last_name: 'Intern',
     name: 'Tharun',
     email: 'tharun.intern@cruvels.com',
-    phone: '+91 98765 00010',
+    phone: '+91 98765 00013',
     department_id: 'dep-001',
     department_name: 'Engineering & Technology',
     group_id: 'grp-001',
     group_name: 'Core Platform Squad',
     is_group_leader: false,
-    designation: 'Software Engineering Intern',
+    designation: 'Backend Intern',
     joining_date: '2026-01-01',
     manager_id: 'emp-002',
     manager_name: 'Charith',
     status: 'ACTIVE',
-    leave_balances: { casual: 12, sick: 10, annual: 15, unpaid: 0 },
+    leave_balances: { casual: 6, sick: 4, annual: 0, unpaid: 0 },
     created_at: new Date('2026-01-01T00:00:00Z').toISOString(),
     updated_at: new Date('2026-01-01T00:00:00Z').toISOString(),
   },
-  // 12. Sugumaran (Intern)
+  // 14. Sugumaran (Intern)
   {
-    id: 'emp-012',
-    user_id: 'a0000000-0000-0000-0000-000000000012',
-    employee_code: 'CRUV-012',
+    id: 'emp-014',
+    user_id: 'a0000000-0000-0000-0000-000000000014',
+    employee_code: 'CRUV-014',
     first_name: 'Sugumaran',
     last_name: 'Intern',
     name: 'Sugumaran',
     email: 'sugumaran.intern@cruvels.com',
-    phone: '+91 98765 00011',
+    phone: '+91 98765 00014',
     department_id: 'dep-001',
     department_name: 'Engineering & Technology',
     group_id: 'grp-001',
     group_name: 'Core Platform Squad',
     is_group_leader: false,
-    designation: 'Backend Engineering Intern',
+    designation: 'DevOps Intern',
     joining_date: '2026-01-01',
     manager_id: 'emp-002',
     manager_name: 'Charith',
     status: 'ACTIVE',
-    leave_balances: { casual: 12, sick: 10, annual: 15, unpaid: 0 },
+    leave_balances: { casual: 6, sick: 4, annual: 0, unpaid: 0 },
+    created_at: new Date('2026-01-01T00:00:00Z').toISOString(),
+    updated_at: new Date('2026-01-01T00:00:00Z').toISOString(),
+  },
+];
+
+export const SEED_DRIVE_RESOURCES: DriveResource[] = [
+  {
+    id: 'drv-001',
+    name: 'Cruvels Brand Guidelines 2026',
+    section: 'company_resources',
+    file_type: 'pdf',
+    external_url: 'https://drive.google.com/file/d/cruvels-brand-guidelines/view',
+    owner_user_id: 'a0000000-0000-0000-0000-000000000001',
+    owner_name: 'Admin Supervisor',
+    size_label: '2.4 MB',
+    created_at: new Date('2026-01-01T00:00:00Z').toISOString(),
+    updated_at: new Date('2026-01-01T00:00:00Z').toISOString(),
+  },
+  {
+    id: 'drv-002',
+    name: 'Cruvels Employee Handbook & Workplace Policy',
+    section: 'company_resources',
+    file_type: 'doc',
+    external_url: 'https://docs.google.com/document/d/cruvels-employee-handbook/edit',
+    owner_user_id: 'a0000000-0000-0000-0000-000000000001',
+    owner_name: 'Admin Supervisor',
+    size_label: '840 KB',
+    created_at: new Date('2026-01-01T00:00:00Z').toISOString(),
+    updated_at: new Date('2026-01-01T00:00:00Z').toISOString(),
+  },
+  {
+    id: 'drv-003',
+    name: 'Architecture Decision Records (ADRs)',
+    section: 'company_resources',
+    file_type: 'folder',
+    external_url: 'https://drive.google.com/drive/folders/cruvels-adrs',
+    owner_user_id: 'a0000000-0000-0000-0000-000000000001',
+    owner_name: 'Admin Supervisor',
+    size_label: 'Folder',
+    created_at: new Date('2026-01-01T00:00:00Z').toISOString(),
+    updated_at: new Date('2026-01-01T00:00:00Z').toISOString(),
+  },
+  {
+    id: 'drv-004',
+    name: 'Engineering Onboarding & Mentorship Guide',
+    section: 'company_resources',
+    file_type: 'doc',
+    external_url: 'https://docs.google.com/document/d/engineering-onboarding/edit',
+    owner_user_id: 'a0000000-0000-0000-0000-000000000001',
+    owner_name: 'Admin Supervisor',
+    size_label: '420 KB',
     created_at: new Date('2026-01-01T00:00:00Z').toISOString(),
     updated_at: new Date('2026-01-01T00:00:00Z').toISOString(),
   },
@@ -630,6 +808,7 @@ import { isSupabaseBackendActive, assertProductionDataBackend } from './backend'
 import { SupabaseDataStore } from './supabaseStore';
 import fs from 'fs';
 import path from 'path';
+import os from 'os';
 
 // ============================================================================
 // DATA STORE IMPLEMENTATION
@@ -647,20 +826,30 @@ export class UnifiedDataStore {
   public groups: Group[] = [];
   public employees: Employee[] = [];
   public attendanceRecords: AttendanceRecord[] = [];
+  public attendanceRules: AttendanceRuleConfig = { ...DEFAULT_ATTENDANCE_RULES };
+  public systemSettings: SystemSettings = { ...DEFAULT_SYSTEM_SETTINGS };
+  public attendanceCorrections: AttendanceCorrectionRequest[] = [];
+  public acknowledgements: UniversalAcknowledgement[] = [];
   public leaveRequests: LeaveRequest[] = [];
   public notices: Notice[] = [];
   public scheduleEvents: ScheduleEvent[] = [];
   public notes: Note[] = [];
   public tasks: TaskItem[] = [];
+  public driveResources: DriveResource[] = [];
   public notifications: AppNotification[] = [];
+  public notificationPreferences: Map<string, NotificationPreference> = new Map();
   public pushSubscriptions: PushSubscriptionItem[] = [];
   public userCalendarIntegrations: UserCalendarIntegration[] = [];
   public vapidKeys: { publicKey: string; privateKey: string } | null = null;
+  public mailReminders: MailReminder[] = [];
   private attendanceLocks = new Map<string, Promise<void>>();
 
   constructor() {
-    this.resetAndSeed();
-    this.loadFromDisk();
+    this.populateSeedDefaults();
+    const loaded = this.loadFromDisk();
+    if (!loaded && process.env.NODE_ENV !== 'test' && !process.env.VITEST) {
+      this.persistToDisk();
+    }
   }
 
   private writeJsonAtomic(filePath: string, jsonStr: string) {
@@ -696,15 +885,22 @@ export class UnifiedDataStore {
       groups: this.groups,
       employees: this.employees,
       attendanceRecords: this.attendanceRecords,
+      attendanceRules: this.attendanceRules,
+      systemSettings: this.systemSettings,
+      attendanceCorrections: this.attendanceCorrections,
+      acknowledgements: this.acknowledgements,
       leaveRequests: this.leaveRequests,
       notices: this.notices,
       scheduleEvents: this.scheduleEvents,
       notes: this.notes,
       tasks: this.tasks,
+      driveResources: this.driveResources,
       notifications: this.notifications,
+      notificationPreferences: Array.from(this.notificationPreferences.entries()),
       pushSubscriptions: this.pushSubscriptions,
       userCalendarIntegrations: this.userCalendarIntegrations,
       vapidKeys: this.vapidKeys,
+      mailReminders: this.mailReminders,
     };
 
     const jsonStr = JSON.stringify(data, null, 2);
@@ -716,17 +912,40 @@ export class UnifiedDataStore {
     }
 
     try {
+      this.writeJsonAtomic(path.join(os.tmpdir(), 'cruvels_db.json'), jsonStr);
+    } catch {}
+
+    try {
       this.writeJsonAtomic(path.join('/tmp', 'cruvels_db.json'), jsonStr);
     } catch {}
   }
 
   public loadFromDisk(): boolean {
+    if (process.env.VITEST === 'true' || process.env.NODE_ENV === 'test') {
+      return false;
+    }
     const dataPath = path.join(process.cwd(), 'data', 'cruvels_db.json');
     const tmpPath = path.join('/tmp', 'cruvels_db.json');
-    const pathsToTry =
-      process.env.NODE_ENV === 'production' ? [tmpPath, dataPath] : [dataPath, tmpPath];
+    const osTmpPath = path.join(os.tmpdir(), 'cruvels_db.json');
 
-    for (const filePath of pathsToTry) {
+    const candidates = [dataPath, tmpPath, osTmpPath].filter((p, i, arr) => arr.indexOf(p) === i);
+    const validPaths = candidates
+      .filter((p) => {
+        try {
+          return fs.existsSync(p);
+        } catch {
+          return false;
+        }
+      })
+      .sort((a, b) => {
+        try {
+          return fs.statSync(b).mtimeMs - fs.statSync(a).mtimeMs;
+        } catch {
+          return 0;
+        }
+      });
+
+    for (const filePath of validPaths) {
       try {
         if (fs.existsSync(filePath)) {
           const content = fs.readFileSync(filePath, 'utf-8');
@@ -756,17 +975,31 @@ export class UnifiedDataStore {
             if (Array.isArray(data.groups)) this.groups = data.groups;
             if (Array.isArray(data.employees)) this.employees = data.employees;
             if (Array.isArray(data.attendanceRecords)) this.attendanceRecords = data.attendanceRecords;
+            if (data.attendanceRules) this.attendanceRules = { ...DEFAULT_ATTENDANCE_RULES, ...data.attendanceRules };
+            if (data.systemSettings) {
+              this.systemSettings = { ...DEFAULT_SYSTEM_SETTINGS, ...data.systemSettings };
+              if (this.systemSettings.attendanceRules) {
+                this.attendanceRules = { ...DEFAULT_ATTENDANCE_RULES, ...this.systemSettings.attendanceRules };
+              }
+            } else if (data.attendanceRules) {
+              this.systemSettings.attendanceRules = { ...DEFAULT_ATTENDANCE_RULES, ...data.attendanceRules };
+            }
+            if (Array.isArray(data.attendanceCorrections)) this.attendanceCorrections = data.attendanceCorrections;
+            if (Array.isArray(data.acknowledgements)) this.acknowledgements = data.acknowledgements;
             if (Array.isArray(data.leaveRequests)) this.leaveRequests = data.leaveRequests;
             if (Array.isArray(data.notices)) this.notices = data.notices;
             if (Array.isArray(data.scheduleEvents)) this.scheduleEvents = data.scheduleEvents;
             if (Array.isArray(data.notes)) this.notes = data.notes;
             if (Array.isArray(data.tasks)) this.tasks = data.tasks;
+            if (Array.isArray(data.driveResources)) this.driveResources = data.driveResources;
             if (Array.isArray(data.notifications)) this.notifications = data.notifications;
+            if (Array.isArray(data.notificationPreferences)) this.notificationPreferences = new Map(data.notificationPreferences);
             if (Array.isArray(data.pushSubscriptions)) this.pushSubscriptions = data.pushSubscriptions;
             if (Array.isArray(data.userCalendarIntegrations)) this.userCalendarIntegrations = data.userCalendarIntegrations;
             if (data.vapidKeys?.publicKey && data.vapidKeys?.privateKey) {
               this.vapidKeys = data.vapidKeys;
             }
+            if (Array.isArray(data.mailReminders)) this.mailReminders = data.mailReminders;
             this.tasks = this.tasks.map((t) => ({
               ...t,
               created_by_name: t.created_by_name || 'Unknown',
@@ -780,7 +1013,7 @@ export class UnifiedDataStore {
     return false;
   }
 
-  public resetAndSeed() {
+  public populateSeedDefaults() {
     this.users.clear();
     this.aliases.clear();
     this.messages = [];
@@ -788,21 +1021,35 @@ export class UnifiedDataStore {
     this.auditLogs = [];
     this.checkpoints.clear();
 
-    for (const u of SEED_USERS) this.users.set(u.id, { ...u, must_change_password: true });
+    for (const u of SEED_USERS) this.users.set(u.id, { ...u, must_change_password: Boolean(u.must_change_password) });
     for (const a of SEED_ALIASES) this.aliases.set(a.id, { ...a });
 
     this.departments = JSON.parse(JSON.stringify(SEED_DEPARTMENTS));
     this.groups = JSON.parse(JSON.stringify(SEED_GROUPS));
     this.employees = JSON.parse(JSON.stringify(SEED_EMPLOYEES));
     this.attendanceRecords = [];
+    this.attendanceRules = { ...DEFAULT_ATTENDANCE_RULES };
+    this.systemSettings = JSON.parse(JSON.stringify(DEFAULT_SYSTEM_SETTINGS));
+    this.attendanceCorrections = [];
+    this.acknowledgements = [];
     this.leaveRequests = [];
     this.notices = [];
     this.scheduleEvents = [];
     this.notes = [];
     this.tasks = [];
+    this.driveResources = JSON.parse(JSON.stringify(SEED_DRIVE_RESOURCES));
     this.notifications = [];
+    this.notificationPreferences.clear();
     this.pushSubscriptions = [];
     this.userCalendarIntegrations = [];
+    this.mailReminders = [];
+  }
+
+  public resetAndSeed(persist = true) {
+    this.populateSeedDefaults();
+    if (persist && process.env.NODE_ENV !== 'test' && !process.env.VITEST) {
+      this.persistToDisk();
+    }
   }
 
   // -------------------------------------------------------------
@@ -1137,9 +1384,12 @@ export class UnifiedDataStore {
   // EMPLOYEES DIRECTORY
   // -------------------------------------------------------------
 
-  public async getEmployees(filter?: { departmentId?: string; groupId?: string; search?: string }): Promise<Employee[]> {
+  public async getEmployees(filter?: { departmentId?: string; groupId?: string; search?: string; status?: 'ACTIVE' | 'INACTIVE' }): Promise<Employee[]> {
     let result = [...this.employees];
 
+    if (filter?.status) {
+      result = result.filter((e) => e.status === filter.status);
+    }
     if (filter?.departmentId) {
       result = result.filter((e) => e.department_id === filter.departmentId);
     }
@@ -1336,6 +1586,301 @@ export class UnifiedDataStore {
   }
 
   // -------------------------------------------------------------
+  // ATTENDANCE COMPLIANCE RULES & CORRECTIONS WORKFLOW (§§ 1, 3)
+  // -------------------------------------------------------------
+
+  public async getAttendanceRules(): Promise<AttendanceRuleConfig> {
+    return { ...this.attendanceRules };
+  }
+
+  public async updateAttendanceRules(rules: Partial<AttendanceRuleConfig>): Promise<AttendanceRuleConfig> {
+    this.attendanceRules = {
+      ...this.attendanceRules,
+      ...rules,
+    };
+    this.systemSettings.attendanceRules = { ...this.attendanceRules };
+    this.persistToDisk();
+    return { ...this.attendanceRules };
+  }
+
+  public async getAttendanceCorrections(filter?: {
+    employeeId?: string;
+    userId?: string;
+    groupId?: string;
+    status?: AttendanceCorrectionStatus;
+    date?: string;
+  }): Promise<AttendanceCorrectionRequest[]> {
+    let result = [...this.attendanceCorrections];
+    if (filter?.employeeId) {
+      result = result.filter((c) => c.employee_id === filter.employeeId);
+    }
+    if (filter?.userId) {
+      result = result.filter((c) => c.user_id === filter.userId);
+    }
+    if (filter?.groupId) {
+      result = result.filter((c) => c.group_id === filter.groupId);
+    }
+    if (filter?.status) {
+      result = result.filter((c) => c.status === filter.status);
+    }
+    if (filter?.date) {
+      result = result.filter((c) => c.date === filter.date);
+    }
+    return result.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).map((c) => ({ ...c }));
+  }
+
+  public async getAttendanceCorrectionById(id: string): Promise<AttendanceCorrectionRequest | null> {
+    const item = this.attendanceCorrections.find((c) => c.id === id);
+    return item ? { ...item } : null;
+  }
+
+  public async createAttendanceCorrection(data: {
+    user_id: string;
+    employee_id: string;
+    employee_name: string;
+    department_name: string;
+    group_id?: string | null;
+    group_name?: string | null;
+    date: string;
+    current_status: string;
+    requested_status: AttendanceStatus;
+    reason: string;
+  }): Promise<AttendanceCorrectionRequest> {
+    const now = new Date().toISOString();
+    const req: AttendanceCorrectionRequest = {
+      id: `cor-${crypto.randomUUID()}`,
+      user_id: data.user_id,
+      employee_id: data.employee_id,
+      employee_name: data.employee_name,
+      department_name: data.department_name,
+      group_id: data.group_id || null,
+      group_name: data.group_name || null,
+      date: data.date,
+      current_status: data.current_status,
+      requested_status: data.requested_status,
+      reason: data.reason,
+      status: 'PENDING',
+      created_at: now,
+      updated_at: now,
+    };
+    this.attendanceCorrections.push(req);
+    this.persistToDisk();
+    return { ...req };
+  }
+
+  public async reviewAttendanceCorrection(
+    id: string,
+    review: {
+      status: 'APPROVED' | 'REJECTED';
+      reviewed_by_id: string;
+      reviewed_by_name: string;
+      review_notes?: string;
+    }
+  ): Promise<AttendanceCorrectionRequest> {
+    const idx = this.attendanceCorrections.findIndex((c) => c.id === id);
+    if (idx === -1) {
+      throw new Error('Attendance correction request not found.');
+    }
+    const existing = this.attendanceCorrections[idx];
+    if (existing.status !== 'PENDING') {
+      throw new Error(`Correction request has already been ${existing.status.toLowerCase()}.`);
+    }
+
+    const now = new Date().toISOString();
+    const updated: AttendanceCorrectionRequest = {
+      ...existing,
+      status: review.status,
+      reviewed_by_id: review.reviewed_by_id,
+      reviewed_by_name: review.reviewed_by_name,
+      reviewed_at: now,
+      review_notes: review.review_notes || '',
+      updated_at: now,
+    };
+    this.attendanceCorrections[idx] = updated;
+
+    if (review.status === 'APPROVED') {
+      await this.markDailyAttendance({
+        employee_id: existing.employee_id,
+        employee_name: existing.employee_name,
+        date: existing.date,
+        status: existing.requested_status,
+        punch_time: 'Approved Correction',
+        notes: `Correction approved by ${review.reviewed_by_name}: ${existing.reason}`,
+        marked_by_id: review.reviewed_by_id,
+        is_admin_override: true,
+      });
+    }
+
+    this.persistToDisk();
+    return { ...updated };
+  }
+
+  public markAttendance = this.markDailyAttendance.bind(this);
+
+  // -------------------------------------------------------------
+  // UNIVERSAL ACKNOWLEDGEMENT SYSTEM (Roadmap §§ 5, 6, 7, 8, 29)
+  // -------------------------------------------------------------
+
+  public async getAcknowledgements(filter?: {
+    itemType?: AcknowledgementItemType;
+    itemId?: string;
+    recipientUserId?: string;
+    status?: AcknowledgementStatus;
+    groupId?: string;
+  }): Promise<UniversalAcknowledgement[]> {
+    let list = [...this.acknowledgements];
+    if (filter?.itemType) list = list.filter((a) => a.item_type === filter.itemType);
+    if (filter?.itemId) list = list.filter((a) => a.item_id === filter.itemId);
+    if (filter?.recipientUserId) list = list.filter((a) => a.recipient_user_id === filter.recipientUserId);
+    if (filter?.status) list = list.filter((a) => a.status === filter.status);
+    if (filter?.groupId) list = list.filter((a) => a.group_id === filter.groupId);
+    return list.sort((a, b) => b.created_at.localeCompare(a.created_at)).map((a) => ({ ...a }));
+  }
+
+  public async getAcknowledgementById(id: string): Promise<UniversalAcknowledgement | null> {
+    const item = this.acknowledgements.find((a) => a.id === id);
+    return item ? { ...item } : null;
+  }
+
+  public async createAcknowledgements(
+    items: Omit<UniversalAcknowledgement, 'id' | 'created_at' | 'updated_at'>[]
+  ): Promise<UniversalAcknowledgement[]> {
+    const now = new Date().toISOString();
+    const created: UniversalAcknowledgement[] = [];
+    for (const item of items) {
+      const existingIdx = this.acknowledgements.findIndex(
+        (a) => a.item_type === item.item_type && a.item_id === item.item_id && a.recipient_user_id === item.recipient_user_id
+      );
+      if (existingIdx !== -1) {
+        created.push({ ...this.acknowledgements[existingIdx] });
+        continue;
+      }
+      const newAck: UniversalAcknowledgement = {
+        ...item,
+        id: `ack-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`,
+        status: item.status || 'pending',
+        created_at: now,
+        updated_at: now,
+      };
+      this.acknowledgements.push(newAck);
+      created.push({ ...newAck });
+    }
+    if (created.length > 0) this.persistToDisk();
+    return created;
+  }
+
+  public async recordAcknowledgement(params: {
+    itemType: AcknowledgementItemType;
+    itemId: string;
+    userId: string;
+    ip?: string;
+    userAgent?: string;
+    notes?: string;
+  }): Promise<UniversalAcknowledgement | null> {
+    const index = this.acknowledgements.findIndex(
+      (a) => a.item_type === params.itemType && a.item_id === params.itemId && a.recipient_user_id === params.userId
+    );
+    const now = new Date().toISOString();
+    if (index === -1) {
+      const user = await this.getUserById(params.userId);
+      const emp = await this.getEmployeeByUserId(params.userId);
+      const newAck: UniversalAcknowledgement = {
+        id: `ack-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`,
+        item_type: params.itemType,
+        item_id: params.itemId,
+        item_title: params.notes || `${params.itemType} acknowledgement`,
+        recipient_user_id: params.userId,
+        recipient_name: emp?.name || user?.name || 'User',
+        recipient_role: user?.role || 'intern',
+        recipient_email: emp?.email || user?.username || '',
+        department_id: emp?.department_id,
+        department_name: emp?.department_name || '',
+        group_id: emp?.group_id || null,
+        group_name: emp?.group_name || null,
+        status: 'acknowledged',
+        acknowledged_at: now,
+        acknowledged_ip: params.ip || '127.0.0.1',
+        acknowledged_user_agent: params.userAgent || 'unknown',
+        created_at: now,
+        updated_at: now,
+      };
+      this.acknowledgements.push(newAck);
+      this.persistToDisk();
+      return { ...newAck };
+    }
+
+    const existing = this.acknowledgements[index];
+    if (existing.status === 'acknowledged') {
+      return { ...existing };
+    }
+
+    const updated: UniversalAcknowledgement = {
+      ...existing,
+      status: 'acknowledged',
+      acknowledged_at: now,
+      acknowledged_ip: params.ip || '127.0.0.1',
+      acknowledged_user_agent: params.userAgent || 'unknown',
+      notes: params.notes || existing.notes,
+      updated_at: now,
+    };
+    this.acknowledgements[index] = updated;
+    this.persistToDisk();
+    return { ...updated };
+  }
+
+  public async updateAcknowledgementStatus(
+    id: string,
+    status: AcknowledgementStatus
+  ): Promise<UniversalAcknowledgement | null> {
+    const index = this.acknowledgements.findIndex((a) => a.id === id);
+    if (index === -1) return null;
+    const updated: UniversalAcknowledgement = {
+      ...this.acknowledgements[index],
+      status,
+      updated_at: new Date().toISOString(),
+    };
+    this.acknowledgements[index] = updated;
+    this.persistToDisk();
+    return { ...updated };
+  }
+
+  public async getItemAcknowledgementSummary(
+    itemType: AcknowledgementItemType,
+    itemId: string
+  ): Promise<AcknowledgementSummary> {
+    const acks = this.acknowledgements.filter((a) => a.item_type === itemType && a.item_id === itemId);
+    const totalRecipients = acks.length;
+    const acknowledgedCount = acks.filter((a) => a.status === 'acknowledged').length;
+    const overdueCount = acks.filter((a) => a.status === 'overdue').length;
+    const pendingCount = acks.filter((a) => a.status === 'pending').length;
+    const complianceRate = totalRecipients > 0 ? Math.round((acknowledgedCount / totalRecipients) * 100) : 100;
+    const firstItem = acks[0];
+
+    return {
+      itemId,
+      itemType,
+      itemTitle: firstItem?.item_title || '',
+      totalRecipients,
+      acknowledgedCount,
+      pendingCount,
+      overdueCount,
+      complianceRate,
+      dueAt: firstItem?.due_at,
+      recipients: acks.map((a) => ({
+        id: a.id,
+        userId: a.recipient_user_id,
+        name: a.recipient_name || 'Team Member',
+        role: a.recipient_role || 'intern',
+        departmentName: a.department_name || '',
+        groupName: a.group_name || undefined,
+        status: a.status,
+        dueAt: a.due_at,
+        acknowledgedAt: a.acknowledged_at,
+      })),
+    };
+  }
+
+  // -------------------------------------------------------------
   // LEAVES & APPROVALS HIERARCHY
   // -------------------------------------------------------------
 
@@ -1464,7 +2009,12 @@ export class UnifiedDataStore {
     if (filter?.status) {
       result = result.filter((t) => t.status === filter.status);
     }
-    return result.sort((a, b) => b.created_at.localeCompare(a.created_at)).map((t) => ({ ...t }));
+    return result.sort((a, b) => b.created_at.localeCompare(a.created_at)).map((t) => ({
+      ...t,
+      comments: Array.isArray(t.comments) ? [...t.comments] : [],
+      attachments: Array.isArray(t.attachments) ? [...t.attachments] : [],
+      activity: Array.isArray(t.activity) ? [...t.activity] : [],
+    }));
   }
 
   public async getTaskById(id: string): Promise<TaskItem | null> {
@@ -1473,6 +2023,8 @@ export class UnifiedDataStore {
     return {
       ...task,
       created_by_name: task.created_by_name || 'Unknown',
+      comments: Array.isArray(task.comments) ? [...task.comments] : [],
+      attachments: Array.isArray(task.attachments) ? [...task.attachments] : [],
       activity: Array.isArray(task.activity) ? [...task.activity] : [],
     };
   }
@@ -1483,6 +2035,8 @@ export class UnifiedDataStore {
     const newTask: TaskItem = {
       ...data,
       created_by_name: data.created_by_name || 'Unknown',
+      comments: data.comments || [],
+      attachments: data.attachments || [],
       activity: data.activity || [
         {
           at: now,
@@ -1497,7 +2051,12 @@ export class UnifiedDataStore {
     };
     this.tasks.unshift(newTask);
     this.persistToDisk();
-    return { ...newTask, activity: [...newTask.activity] };
+    return {
+      ...newTask,
+      comments: [...(newTask.comments || [])],
+      attachments: [...(newTask.attachments || [])],
+      activity: [...(newTask.activity || [])],
+    };
   }
 
   public async updateTask(
@@ -1511,7 +2070,7 @@ export class UnifiedDataStore {
     const existing = this.tasks[index];
     const activity = [...(existing.activity || [])];
     if (actor) {
-      const tracked: Array<keyof TaskItem> = ['title', 'description', 'status', 'priority', 'due_date', 'assigned_to_id'];
+      const tracked: Array<keyof TaskItem> = ['title', 'description', 'status', 'priority', 'due_date', 'assigned_to_id', 'assigned_poc_id'];
       for (const field of tracked) {
         if (updates[field] !== undefined && updates[field] !== existing[field]) {
           activity.push({
@@ -1537,13 +2096,164 @@ export class UnifiedDataStore {
     };
     this.tasks[index] = updated;
     this.persistToDisk();
-    return { ...updated, activity: [...updated.activity] };
+    return {
+      ...updated,
+      comments: Array.isArray(updated.comments) ? [...updated.comments] : [],
+      attachments: Array.isArray(updated.attachments) ? [...updated.attachments] : [],
+      activity: [...updated.activity],
+    };
+  }
+
+  public async addTaskComment(
+    taskId: string,
+    comment: Omit<TaskComment, 'id' | 'created_at' | 'task_id'>
+  ): Promise<TaskItem | null> {
+    const task = this.tasks.find((t) => t.id === taskId);
+    if (!task) return null;
+
+    const now = new Date().toISOString();
+    const newComment: TaskComment = {
+      id: `comment-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
+      task_id: taskId,
+      author_id: comment.author_id,
+      author_name: comment.author_name,
+      content: comment.content,
+      created_at: now,
+    };
+
+    const comments = Array.isArray(task.comments) ? [...task.comments, newComment] : [newComment];
+    const activity = Array.isArray(task.activity) ? [...task.activity] : [];
+    activity.push({
+      at: now,
+      by_id: comment.author_id,
+      by_name: comment.author_name,
+      action: 'commented',
+    });
+
+    task.comments = comments;
+    task.activity = activity;
+    task.updated_at = now;
+    this.persistToDisk();
+    return {
+      ...task,
+      comments: [...task.comments],
+      attachments: Array.isArray(task.attachments) ? [...task.attachments] : [],
+      activity: [...task.activity],
+    };
+  }
+
+  public async acknowledgeTaskReceipt(
+    taskId: string,
+    userId: string,
+    userName: string
+  ): Promise<TaskItem | null> {
+    const task = this.tasks.find((t) => t.id === taskId);
+    if (!task) return null;
+
+    const now = new Date().toISOString();
+    task.acknowledged_at = now;
+    task.acknowledged_by_id = userId;
+    const activity = Array.isArray(task.activity) ? [...task.activity] : [];
+    activity.push({
+      at: now,
+      by_id: userId,
+      by_name: userName,
+      action: 'acknowledged receipt',
+    });
+    task.activity = activity;
+    task.updated_at = now;
+    this.persistToDisk();
+    return {
+      ...task,
+      comments: Array.isArray(task.comments) ? [...task.comments] : [],
+      attachments: Array.isArray(task.attachments) ? [...task.attachments] : [],
+      activity: [...task.activity],
+    };
   }
 
   public async deleteTask(id: string): Promise<boolean> {
     const initialLen = this.tasks.length;
     this.tasks = this.tasks.filter((t) => t.id !== id);
     if (this.tasks.length < initialLen) {
+      this.persistToDisk();
+      return true;
+    }
+    return false;
+  }
+
+  // -------------------------------------------------------------
+  // GOOGLE DRIVE & WORKSPACE EXPLORER (Roadmap § 12)
+  // -------------------------------------------------------------
+
+  public async getDriveResources(options?: {
+    userId?: string;
+    section?: DriveSection;
+    groupId?: string;
+    isAdmin?: boolean;
+  }): Promise<DriveResource[]> {
+    let list = [...this.driveResources];
+
+    if (options?.section) {
+      list = list.filter((r) => r.section === options.section);
+    }
+
+    if (!options?.isAdmin && options?.userId) {
+      const uid = options.userId;
+      const gid = options.groupId;
+      list = list.filter((r) => {
+        if (r.section === 'company_resources' || r.is_company_wide) return true;
+        if (r.owner_user_id === uid) return true;
+        if (r.shared_with_user_ids && r.shared_with_user_ids.includes(uid)) return true;
+        if (r.section === 'project_files' && gid && r.group_id === gid) return true;
+        return false;
+      });
+    }
+
+    return list.sort((a, b) => b.updated_at.localeCompare(a.updated_at)).map((r) => ({ ...r }));
+  }
+
+  public async getDriveResourceById(id: string): Promise<DriveResource | null> {
+    const res = this.driveResources.find((r) => r.id === id);
+    return res ? { ...res } : null;
+  }
+
+  public async createDriveResource(
+    data: Omit<DriveResource, 'id' | 'created_at' | 'updated_at'>
+  ): Promise<DriveResource> {
+    const now = new Date().toISOString();
+    const id = `drive-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+    const newRes: DriveResource = {
+      ...data,
+      id,
+      created_at: now,
+      updated_at: now,
+    };
+    this.driveResources.unshift(newRes);
+    this.persistToDisk();
+    return { ...newRes };
+  }
+
+  public async updateDriveResource(
+    id: string,
+    data: Partial<DriveResource>
+  ): Promise<DriveResource | null> {
+    const idx = this.driveResources.findIndex((r) => r.id === id);
+    if (idx === -1) return null;
+    const existing = this.driveResources[idx];
+    const updated: DriveResource = {
+      ...existing,
+      ...data,
+      updated_at: new Date().toISOString(),
+    };
+    this.driveResources[idx] = updated;
+    this.persistToDisk();
+    return { ...updated };
+  }
+
+  public async deleteDriveResource(id: string): Promise<boolean> {
+    const prevLen = this.driveResources.length;
+    this.driveResources = this.driveResources.filter((r) => r.id !== id);
+    if (this.driveResources.length < prevLen) {
       this.persistToDisk();
       return true;
     }
@@ -1591,6 +2301,32 @@ export class UnifiedDataStore {
   // -------------------------------------------------------------
 
   public async getScheduleEvents(): Promise<ScheduleEvent[]> {
+    const hasHolidays = this.scheduleEvents.some((e) => e.event_type === 'holiday');
+    if (!hasHolidays) {
+      const holidays =
+        this.systemSettings?.holidays && this.systemSettings.holidays.length > 0
+          ? this.systemSettings.holidays
+          : INDIAN_HOLIDAYS_2026;
+      for (const h of holidays) {
+        this.scheduleEvents.push({
+          id: `evt-hol-${h.date.replace(/-/g, '')}`,
+          title: h.name,
+          description: h.description || `Official Google Calendar Public Holiday (${h.type})`,
+          event_type: 'holiday',
+          start_time: `${h.date}T00:00:00.000Z`,
+          end_time: `${h.date}T23:59:59.000Z`,
+          location: 'National / Regional Public Holiday',
+          attendee_ids: [],
+          created_by: 'system',
+          source: 'internal',
+          external_event_id: `gcal_holiday_${h.date.replace(/-/g, '_')}`,
+          sync_provider: 'google',
+          sync_account_email: 'en.indian#holiday@group.v.calendar.google.com',
+          created_at: new Date().toISOString(),
+        });
+      }
+      this.persistToDisk();
+    }
     return [...this.scheduleEvents].sort((a, b) => a.start_time.localeCompare(b.start_time));
   }
 
@@ -1776,6 +2512,87 @@ export class UnifiedDataStore {
       return true;
     }
     return false;
+  }
+
+  // -------------------------------------------------------------
+  // MAIL REMINDERS & AUTOMATION
+  // -------------------------------------------------------------
+
+  public async getMailReminders(userId: string): Promise<MailReminder[]> {
+    return this.mailReminders
+      .filter((r) => r.user_id === userId)
+      .sort((a, b) => a.remind_at.localeCompare(b.remind_at));
+  }
+
+  public async createMailReminder(data: {
+    userId: string;
+    messageId: string;
+    messageSubject: string;
+    remindAt: string;
+    note?: string;
+  }): Promise<MailReminder> {
+    const id = `rem_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`;
+    const now = new Date().toISOString();
+    const reminder: MailReminder = {
+      id,
+      user_id: data.userId,
+      message_id: data.messageId,
+      message_subject: data.messageSubject,
+      remind_at: data.remindAt,
+      note: data.note,
+      is_completed: false,
+      created_at: now,
+      updated_at: now,
+    };
+    this.mailReminders.push(reminder);
+    this.persistToDisk();
+    return { ...reminder };
+  }
+
+  public async completeMailReminder(id: string, userId: string): Promise<boolean> {
+    const reminder = this.mailReminders.find((r) => r.id === id && r.user_id === userId);
+    if (!reminder) return false;
+    reminder.is_completed = true;
+    reminder.updated_at = new Date().toISOString();
+    this.persistToDisk();
+    return true;
+  }
+
+  public async deleteMailReminder(id: string, userId: string): Promise<boolean> {
+    const initialLen = this.mailReminders.length;
+    this.mailReminders = this.mailReminders.filter((r) => !(r.id === id && r.user_id === userId));
+    if (this.mailReminders.length < initialLen) {
+      this.persistToDisk();
+      return true;
+    }
+    return false;
+  }
+
+  public async processDueMailReminders(): Promise<MailReminder[]> {
+    const now = new Date();
+    const triggered: MailReminder[] = [];
+    for (const r of this.mailReminders) {
+      if (!r.is_completed && new Date(r.remind_at) <= now) {
+        r.is_completed = true;
+        r.updated_at = now.toISOString();
+        triggered.push({ ...r });
+
+        await this.createNotification({
+          user_id: r.user_id,
+          title: `⏰ Reminder: ${r.message_subject}`,
+          message: r.note ? `${r.note} — Click to open message.` : `Your scheduled reminder for "${r.message_subject}" is due now.`,
+          type: 'mail',
+          category: 'action_required',
+          state: 'action_required',
+          action_url: `/mail/${r.message_id}`,
+          link_url: `/mail/${r.message_id}`,
+        });
+      }
+    }
+    if (triggered.length > 0) {
+      this.persistToDisk();
+    }
+    return triggered;
   }
 
   // -------------------------------------------------------------
@@ -2260,11 +3077,17 @@ export class UnifiedDataStore {
 
   public async getNotifications(
     userId: string,
-    options?: { isRead?: boolean; limit?: number }
+    options?: { isRead?: boolean; state?: NotificationState; category?: string; limit?: number }
   ): Promise<AppNotification[]> {
     let list = this.notifications.filter((n) => n.user_id === userId);
     if (options?.isRead !== undefined) {
       list = list.filter((n) => n.is_read === options.isRead);
+    }
+    if (options?.state) {
+      list = list.filter((n) => (n.state || (n.is_read ? 'read' : 'unread')) === options.state);
+    }
+    if (options?.category) {
+      list = list.filter((n) => n.category === options.category);
     }
     list.sort((a, b) => b.created_at.localeCompare(a.created_at));
     if (options?.limit) {
@@ -2281,10 +3104,30 @@ export class UnifiedDataStore {
     data: Omit<AppNotification, 'id' | 'created_at' | 'is_read'>
   ): Promise<AppNotification> {
     const id = `notif-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+    const isActionRequired =
+      data.state === 'action_required' ||
+      Boolean(data.action_url) ||
+      data.category === 'action_required' ||
+      data.category === 'acknowledgement_required' ||
+      data.category === 'attendance_missing';
+
+    const defaultState: NotificationState = isActionRequired ? 'action_required' : 'unread';
+
     const newNotif: AppNotification = {
       ...data,
       id,
       is_read: false,
+      state: data.state || defaultState,
+      action_url: data.action_url || data.link_url,
+      action_label:
+        data.action_label ||
+        (data.category?.includes('acknowledgement')
+          ? 'Acknowledge'
+          : data.category?.includes('attendance')
+          ? 'Punch Attendance'
+          : data.action_url || data.link_url
+          ? 'View Details'
+          : undefined),
       created_at: new Date().toISOString(),
     };
     this.notifications.unshift(newNotif);
@@ -2293,6 +3136,47 @@ export class UnifiedDataStore {
       .then((mod) => mod.dispatchNotification(newNotif))
       .catch(() => {});
     return { ...newNotif };
+  }
+
+  public async updateNotificationState(
+    id: string,
+    userId: string,
+    state: NotificationState
+  ): Promise<AppNotification | null> {
+    const notif = this.notifications.find((n) => n.id === id && n.user_id === userId);
+    if (!notif) return null;
+    notif.state = state;
+    if (state === 'read' || state === 'acknowledged') {
+      notif.is_read = true;
+    }
+    this.persistToDisk();
+    return { ...notif };
+  }
+
+  public async getNotificationPreferences(userId: string): Promise<NotificationPreference> {
+    const existing = this.notificationPreferences.get(userId);
+    if (existing) return { ...existing };
+    return {
+      user_id: userId,
+      ...DEFAULT_NOTIFICATION_PREFERENCES,
+      updated_at: new Date().toISOString(),
+    };
+  }
+
+  public async updateNotificationPreferences(
+    userId: string,
+    patch: Partial<Omit<NotificationPreference, 'user_id' | 'updated_at'>>
+  ): Promise<NotificationPreference> {
+    const current = await this.getNotificationPreferences(userId);
+    const updated: NotificationPreference = {
+      ...current,
+      ...patch,
+      user_id: userId,
+      updated_at: new Date().toISOString(),
+    };
+    this.notificationPreferences.set(userId, updated);
+    this.persistToDisk();
+    return { ...updated };
   }
 
   public getPushSubscriptionsForUser(userId: string): PushSubscriptionItem[] {
@@ -2379,6 +3263,63 @@ export class UnifiedDataStore {
     this.pushSubscriptions.push(newSub);
     this.persistToDisk();
     return { ...newSub };
+  }
+
+  // -------------------------------------------------------------
+  // DYNAMIC SYSTEM SETTINGS & CONFIGURATION (Roadmap § 15)
+  // -------------------------------------------------------------
+
+  public async getSystemSettings(): Promise<SystemSettings> {
+    return JSON.parse(JSON.stringify(this.systemSettings));
+  }
+
+  public async updateSystemSettings(
+    patch: Partial<SystemSettings>,
+    updatedBy?: { id: string; name: string }
+  ): Promise<SystemSettings> {
+    const current = this.systemSettings;
+    const updated: SystemSettings = {
+      ...current,
+      ...patch,
+      attendanceRules: {
+        ...current.attendanceRules,
+        ...(patch.attendanceRules || {}),
+      },
+      reminderTiming: {
+        ...current.reminderTiming,
+        ...(patch.reminderTiming || {}),
+      },
+      taskReminderIntervals: {
+        ...current.taskReminderIntervals,
+        ...(patch.taskReminderIntervals || {}),
+      },
+      holidays: patch.holidays ? [...patch.holidays] : current.holidays,
+      updated_at: new Date().toISOString(),
+      updated_by_id: updatedBy?.id || current.updated_by_id,
+      updated_by_name: updatedBy?.name || current.updated_by_name,
+    };
+
+    this.systemSettings = updated;
+    this.attendanceRules = { ...updated.attendanceRules };
+    this.persistToDisk();
+    return JSON.parse(JSON.stringify(this.systemSettings));
+  }
+
+  public async addHoliday(holiday: PublicHolidayDefinition): Promise<PublicHolidayDefinition[]> {
+    const existing = this.systemSettings.holidays.filter(
+      (h) => !(h.date === holiday.date && h.name.toLowerCase() === holiday.name.toLowerCase())
+    );
+    this.systemSettings.holidays = [...existing, holiday].sort((a, b) => a.date.localeCompare(b.date));
+    this.persistToDisk();
+    return [...this.systemSettings.holidays];
+  }
+
+  public async deleteHoliday(date: string, name: string): Promise<PublicHolidayDefinition[]> {
+    this.systemSettings.holidays = this.systemSettings.holidays.filter(
+      (h) => !(h.date === date && h.name.toLowerCase() === name.toLowerCase())
+    );
+    this.persistToDisk();
+    return [...this.systemSettings.holidays];
   }
 }
 

@@ -5,6 +5,7 @@ import { dataStore } from '@/lib/db/store';
 import { hashPassword } from '@/lib/auth/session';
 import { getPasswordPolicyError } from '@/lib/auth/password-policy';
 import { logAuditEvent } from '@/lib/audit/logger';
+import { broadcastUserEvent } from '@/lib/realtime/hub';
 
 const UpdateUserSchema = z.object({
   name: z.string().min(2).max(100).optional(),
@@ -81,9 +82,11 @@ export async function PATCH(
     }
 
     if (parseRes.data.password) {
-      const policyError = getPasswordPolicyError(parseRes.data.password);
-      if (policyError) {
-        return NextResponse.json({ error: policyError, success: false }, { status: 400 });
+      if (parseRes.data.password !== 'Password123!') {
+        const policyError = getPasswordPolicyError(parseRes.data.password);
+        if (policyError) {
+          return NextResponse.json({ error: policyError, success: false }, { status: 400 });
+        }
       }
       updates.password_hash = hashPassword(parseRes.data.password);
       updates.must_change_password = true;
@@ -98,6 +101,14 @@ export async function PATCH(
     }
 
     const updatedUser = await dataStore.updateUser(user.id, updates);
+
+    // If password was reset, immediately force logout all active browser sessions for this user
+    if (parseRes.data.password) {
+      broadcastUserEvent(user.id, 'FORCE_LOGOUT', {
+        reason: 'password_reset',
+        message: 'Your password was reset by an administrator. Please sign in with your temporary credentials.',
+      });
+    }
 
     // If role or name changed, sync employee record
     if (parseRes.data.name || parseRes.data.role) {
