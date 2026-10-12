@@ -85,6 +85,13 @@ export default function RootLayout({
     document.documentElement.setAttribute('data-theme','light');
   }
   if(t){localStorage.setItem('cruvels-theme',t);document.cookie='cruvels-theme='+t+';path=/;max-age=31536000;SameSite=Lax';}
+  window.addEventListener('focusin',function(e){
+    if(e.target&&(e.target.tagName==='INPUT'||e.target.tagName==='TEXTAREA'||e.target.tagName==='SELECT')){
+      setTimeout(function(){
+        try{e.target.scrollIntoView({behavior:'smooth',block:'center'});}catch(err){}
+      },300);
+    }
+  });
 }catch(e){}})();`,
           }}
         />

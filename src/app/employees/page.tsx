@@ -240,7 +240,7 @@ export default function EmployeesPage() {
         )}
 
         {/* Filter Controls */}
-        <div className="relative flex flex-col md:flex-row items-stretch md:items-center gap-3 rounded-2xl p-3 border shadow-sm w-full" style={{ background: 'var(--surface)', borderColor: 'var(--line)' }}>
+        <div className="relative z-30 flex flex-col sm:flex-row items-stretch sm:items-center gap-3 rounded-2xl p-3 border shadow-sm w-full" style={{ background: 'var(--surface)', borderColor: 'var(--line)' }}>
           <div className="relative flex-1 w-full min-w-0">
             <Search className="pointer-events-none absolute left-3 top-2.5 h-3.5 w-3.5" style={{ color: 'var(--muted)' }} />
             <input
@@ -253,12 +253,12 @@ export default function EmployeesPage() {
             />
           </div>
 
-          <div className="flex flex-wrap sm:flex-nowrap items-center gap-2 w-full md:w-auto min-w-0">
+          <div className="flex items-center gap-2 w-full sm:w-auto min-w-0">
             {!isSquadOnly && (
               <select
                 value={deptFilter}
                 onChange={(e) => setDeptFilter(e.target.value)}
-                className="flex-1 sm:flex-none min-w-[130px] rounded-xl border py-1.5 px-3 text-xs focus:outline-none transition-colors cursor-pointer truncate"
+                className="flex-1 sm:flex-initial sm:w-auto min-w-[130px] rounded-xl border py-1.5 px-3 text-xs focus:outline-none transition-colors cursor-pointer truncate"
                 style={{ background: 'var(--surface-2)', borderColor: 'var(--line)', color: 'var(--ink)' }}
               >
                 <option value="">All Departments</option>
@@ -273,7 +273,7 @@ export default function EmployeesPage() {
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
-              className="flex-1 sm:flex-none min-w-[110px] rounded-xl border py-1.5 px-3 text-xs focus:outline-none transition-colors cursor-pointer"
+              className="flex-1 sm:flex-initial sm:w-auto min-w-[110px] rounded-xl border py-1.5 px-3 text-xs focus:outline-none transition-colors cursor-pointer"
               style={{ background: 'var(--surface-2)', borderColor: 'var(--line)', color: 'var(--ink)' }}
             >
               <option value="">All Statuses</option>
@@ -286,9 +286,28 @@ export default function EmployeesPage() {
         {/* Employee Cards Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {loading ? (
-            <div className="col-span-full flex items-center justify-center p-16">
-              <div className="h-8 w-8 animate-spin rounded-full border-3 border-blue-600 border-t-transparent" />
-            </div>
+            Array.from({ length: 6 }).map((_, idx) => (
+              <div
+                key={idx}
+                className="rounded-3xl p-5 border space-y-4 animate-pulse flex flex-col justify-between"
+                style={{ background: 'var(--surface)', borderColor: 'var(--line)' }}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <div className="h-11 w-11 rounded-2xl bg-slate-200 dark:bg-slate-700/60" />
+                    <div className="space-y-1.5">
+                      <div className="h-3.5 w-28 rounded-md bg-slate-200 dark:bg-slate-700/60" />
+                      <div className="h-2.5 w-20 rounded-md bg-slate-200 dark:bg-slate-700/40" />
+                    </div>
+                  </div>
+                  <div className="h-4 w-12 rounded-full bg-slate-200 dark:bg-slate-700/50" />
+                </div>
+                <div className="space-y-2 pt-2 border-t" style={{ borderColor: 'var(--line-soft)' }}>
+                  <div className="h-2.5 w-3/4 rounded-md bg-slate-200 dark:bg-slate-700/40" />
+                  <div className="h-2.5 w-1/2 rounded-md bg-slate-200 dark:bg-slate-700/40" />
+                </div>
+              </div>
+            ))
           ) : employees.length === 0 ? (
             <div className="col-span-full rounded-3xl p-12 text-center border" style={{ background: 'var(--surface)', borderColor: 'var(--line)' }}>
               <Users className="h-10 w-10 mx-auto mb-2" style={{ color: 'var(--muted)' }} />

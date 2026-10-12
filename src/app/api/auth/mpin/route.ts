@@ -36,6 +36,21 @@ export async function POST(req: NextRequest) {
 
     const { token, userId } = parseRes.data;
 
+    // 1b. User-level Rate Limiting Check (5 attempts per 5 minutes per user account)
+    if (userId) {
+      const userRateCheck = await checkRateLimit(`mpin-user:${userId}`, 5, 300);
+      if (!userRateCheck.allowed) {
+        return NextResponse.json(
+          {
+            error: `Too many failed MPIN attempts for this account. Session locked. Please sign in with your email and password.`,
+            success: false,
+            requiresPasswordLogin: true,
+          },
+          { status: 429 }
+        );
+      }
+    }
+
     // 2. Cryptographic Session Token Verification
     const sessionUser = await verifySessionToken(token);
     if (!sessionUser) {

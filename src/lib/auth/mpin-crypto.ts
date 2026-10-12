@@ -196,10 +196,23 @@ export async function decryptMpinSession(
 /**
  * Local storage management helpers
  */
+const memoryStore: Record<string, string> = {};
+
+function getStorage(): { getItem: (k: string) => string | null; setItem: (k: string, v: string) => void; removeItem: (k: string) => void } {
+  if (typeof window !== 'undefined' && window.localStorage) {
+    return window.localStorage;
+  }
+  return {
+    getItem: (k: string) => memoryStore[k] || null,
+    setItem: (k: string, v: string) => { memoryStore[k] = v; },
+    removeItem: (k: string) => { delete memoryStore[k]; },
+  };
+}
+
 export function getStoredMpinRecord(): MpinDeviceRecord | null {
-  if (typeof window === 'undefined') return null;
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const storage = getStorage();
+    const raw = storage.getItem(STORAGE_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as MpinDeviceRecord;
     if (parsed && parsed.version === 1 && parsed.ciphertextHex && parsed.user?.name) {
@@ -212,18 +225,18 @@ export function getStoredMpinRecord(): MpinDeviceRecord | null {
 }
 
 export function saveMpinRecord(record: MpinDeviceRecord): void {
-  if (typeof window === 'undefined') return;
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(record));
+    const storage = getStorage();
+    storage.setItem(STORAGE_KEY, JSON.stringify(record));
   } catch (err) {
-    console.warn('[MPIN] Unable to persist record to localStorage', err);
+    console.warn('[MPIN] Unable to persist record', err);
   }
 }
 
 export function clearStoredMpin(): void {
-  if (typeof window === 'undefined') return;
   try {
-    localStorage.removeItem(STORAGE_KEY);
+    const storage = getStorage();
+    storage.removeItem(STORAGE_KEY);
   } catch {}
 }
 
@@ -233,4 +246,40 @@ export function updateMpinLastLogin(): void {
     record.lastLoginAt = new Date().toISOString();
     saveMpinRecord(record);
   }
+}
+
+export const MAX_MPIN_ATTEMPTS = 5;
+const ATTEMPTS_KEY = 'cruvels_mpin_failed_attempts_v1';
+
+export function getMpinFailedAttempts(): number {
+  try {
+    const storage = getStorage();
+    const raw = storage.getItem(ATTEMPTS_KEY);
+    return raw ? parseInt(raw, 10) || 0 : 0;
+  } catch {
+    return 0;
+  }
+}
+
+export function incrementMpinFailedAttempts(): number {
+  try {
+    const storage = getStorage();
+    const count = getMpinFailedAttempts() + 1;
+    storage.setItem(ATTEMPTS_KEY, String(count));
+    if (count >= MAX_MPIN_ATTEMPTS) {
+      // Automatic bruteforce wipe: purge stored credentials
+      clearStoredMpin();
+      resetMpinFailedAttempts();
+    }
+    return count;
+  } catch {
+    return 0;
+  }
+}
+
+export function resetMpinFailedAttempts(): void {
+  try {
+    const storage = getStorage();
+    storage.removeItem(ATTEMPTS_KEY);
+  } catch {}
 }

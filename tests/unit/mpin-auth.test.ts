@@ -114,4 +114,34 @@ describe('Zero-Trust MPIN Persistent Device Authentication Suite', () => {
     expect(data.success).toBe(false);
     expect(data.requiresPasswordLogin).toBe(true);
   });
+
+  it('triggers 5-attempt bruteforce lockout and automatically clears stored credentials', async () => {
+    const {
+      incrementMpinFailedAttempts,
+      resetMpinFailedAttempts,
+      getMpinFailedAttempts,
+      saveMpinRecord,
+      getStoredMpinRecord,
+      MAX_MPIN_ATTEMPTS,
+    } = await import('@/lib/auth/mpin-crypto');
+
+    resetMpinFailedAttempts();
+    expect(getMpinFailedAttempts()).toBe(0);
+
+    const record = await encryptMpinSession('1234', sampleSessionPayload);
+    saveMpinRecord(record);
+    expect(getStoredMpinRecord()).not.toBeNull();
+
+    // 4 failed attempts: counter increments, record persists
+    for (let i = 1; i < MAX_MPIN_ATTEMPTS; i++) {
+      const count = incrementMpinFailedAttempts();
+      expect(count).toBe(i);
+      expect(getStoredMpinRecord()).not.toBeNull();
+    }
+
+    // 5th failed attempt: reaches threshold, triggers wipeout
+    const finalCount = incrementMpinFailedAttempts();
+    expect(finalCount).toBe(MAX_MPIN_ATTEMPTS);
+    expect(getStoredMpinRecord()).toBeNull();
+  });
 });

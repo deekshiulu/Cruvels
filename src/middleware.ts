@@ -44,10 +44,52 @@ function unauthenticated(req: NextRequest): NextResponse {
   return NextResponse.redirect(loginUrl);
 }
 
+const ALLOWED_ORIGINS = [
+  process.env.APP_URL,
+  process.env.NEXT_PUBLIC_APP_URL,
+  'https://portal.cruvels.com',
+  'http://localhost:3000',
+  'http://localhost:3005',
+  'http://127.0.0.1:3000',
+  'http://127.0.0.1:3005',
+  'http://10.0.2.2:3000',
+  'http://10.0.2.2:3005',
+].filter(Boolean) as string[];
+
+function getCorsHeaders(origin: string | null): Record<string, string> {
+  const headers: Record<string, string> = {
+    'Access-Control-Allow-Credentials': 'true',
+    'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Requested-With, Accept, x-cruvels-warmup',
+  };
+
+  if (!origin) return headers;
+
+  const isAllowed = ALLOWED_ORIGINS.some(
+    (allowed) => origin.toLowerCase() === allowed.toLowerCase() || origin.endsWith('.cruvels.com')
+  );
+
+  if (isAllowed) {
+    headers['Access-Control-Allow-Origin'] = origin;
+  }
+
+  return headers;
+}
+
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
+  const origin = req.headers.get('origin');
+  const corsHeaders = getCorsHeaders(origin);
+
+  // Handle CORS preflight OPTIONS request for all routes
+  if (req.method === 'OPTIONS') {
+    return new NextResponse(null, { status: 204, headers: corsHeaders });
+  }
+
   if (isPublicPath(pathname)) {
-    return NextResponse.next();
+    const res = NextResponse.next();
+    Object.entries(corsHeaders).forEach(([k, v]) => res.headers.set(k, v));
+    return res;
   }
 
   // Allow background route pre-compilation during development
@@ -55,7 +97,9 @@ export async function middleware(req: NextRequest) {
     process.env.NODE_ENV !== 'production' &&
     (req.headers.get('x-cruvels-warmup') === '1' || req.nextUrl.searchParams.get('_warmup') === '1')
   ) {
-    return NextResponse.next();
+    const res = NextResponse.next();
+    Object.entries(corsHeaders).forEach(([k, v]) => res.headers.set(k, v));
+    return res;
   }
 
   if (isCronSync(req, pathname)) {

@@ -39,6 +39,9 @@ import {
   updateMpinLastLogin,
   encryptMpinSession,
   decryptMpinSession,
+  incrementMpinFailedAttempts,
+  resetMpinFailedAttempts,
+  MAX_MPIN_ATTEMPTS,
 } from '@/lib/auth/mpin-crypto';
 
 const WARMUP_ROUTES = [
@@ -277,13 +280,29 @@ function LoginForm() {
       try {
         decrypted = await decryptMpinSession(pin, savedMpinRecord);
       } catch {
+        const attempts = incrementMpinFailedAttempts();
         setMpinShake(true);
         setTimeout(() => setMpinShake(false), 500);
-        setMpinError('Incorrect MPIN. Please try again.');
         setMpinInput('');
         setMpinLoading(false);
+
+        if (attempts >= MAX_MPIN_ATTEMPTS) {
+          clearStoredMpin();
+          setSavedMpinRecord(null);
+          setMpinError('MPIN Locked: 5 incorrect attempts entered. For security, your session has been cleared. Please log in with your email and password.');
+          setTimeout(() => {
+            setView('login');
+            setUsernameOrEmail(savedMpinRecord.user.username || savedMpinRecord.user.primaryAlias || '');
+          }, 2500);
+          return;
+        }
+
+        setMpinError(`Incorrect MPIN (${attempts}/${MAX_MPIN_ATTEMPTS} attempts). Please try again.`);
         return;
       }
+
+      // Reset failed attempts upon successful decryption
+      resetMpinFailedAttempts();
 
       // 2. Validate token and establish persistent session cookie
       const res = await fetch('/api/auth/mpin', {
