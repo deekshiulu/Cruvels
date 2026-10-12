@@ -257,8 +257,8 @@ export default function DashboardPage() {
             backgroundPosition: 'center 35%',
           }}
         >
-          <div className="relative z-10 flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6">
-            <div className="space-y-2.5 max-w-2xl">
+          <div className="relative z-10 flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6 min-w-0">
+            <div className="space-y-2.5 max-w-2xl min-w-0 flex-1">
               {/* Badge */}
               <div className="inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-bold bg-blue-950/80 text-blue-300 border border-blue-500/30 shadow-[0_0_12px_rgba(59,130,246,0.15)]">
                 <img src="/cruvels-logo-transparent.png" alt="Cruvels Logo" className="h-4 w-4 object-contain" />
@@ -267,7 +267,7 @@ export default function DashboardPage() {
 
               {/* Headline */}
               <h1
-                className="text-2xl sm:text-3xl lg:text-4xl font-black tracking-tight text-white"
+                className="text-2xl sm:text-3xl lg:text-4xl font-black tracking-tight text-white break-words"
                 style={{ fontFamily: 'Bricolage Grotesque, sans-serif', color: '#FFFFFF' }}
               >
                 Welcome back, {displayName} 👋
@@ -297,24 +297,24 @@ export default function DashboardPage() {
             </div>
 
             {/* Quick Header Actions */}
-            <div className="flex flex-col items-start lg:items-end justify-between gap-4 shrink-0">
-              <div className="text-left lg:text-right max-w-xs">
+            <div className="flex flex-col items-start lg:items-end justify-between gap-4 w-full lg:w-auto shrink-0">
+              <div className="text-left lg:text-right max-w-xs hidden sm:block">
                 <p className="text-xs italic text-slate-300/90 font-medium leading-relaxed">
                   &ldquo;Better systems. Happier people. A stronger tomorrow.&rdquo;
                 </p>
               </div>
 
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-3 w-full sm:w-auto flex-wrap">
                 <button
                   onClick={() => router.push('/mail/compose')}
-                  className="flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-bold text-white bg-slate-900/90 hover:bg-slate-800 border border-slate-700 hover:border-slate-500 transition-all shadow-md cursor-pointer"
+                  className="flex-1 sm:flex-none justify-center flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-bold text-white bg-slate-900/90 hover:bg-slate-800 border border-slate-700 hover:border-slate-500 transition-all shadow-md cursor-pointer"
                 >
                   <Mail className="h-4 w-4 text-cyan-400" />
                   <span>Compose Email</span>
                 </button>
                 <button
                   onClick={() => router.push('/leaves')}
-                  className="flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-500 transition-all shadow-[0_0_18px_rgba(37,99,235,0.35)] cursor-pointer"
+                  className="flex-1 sm:flex-none justify-center flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-500 transition-all shadow-[0_0_18px_rgba(37,99,235,0.35)] cursor-pointer"
                 >
                   <CalendarIcon className="h-4 w-4" />
                   <span>Request Leave</span>

@@ -1,8 +1,13 @@
 // Cruvels Workplace OS Service Worker
-// Offline Caching Shell & Device Push Notifications Engine
+// Offline Caching Shell, PWA Resiliency & Push Notifications Engine
 
 const CACHE_NAME = 'cruvels-workplace-v2';
-const STATIC_ASSETS = [
+const RUNTIME_CACHE = 'cruvels-runtime-v2';
+
+const STATIC_PRECACHE = [
+  '/',
+  '/dashboard',
+  '/schedule',
   '/offline.html',
   '/favicon.ico',
   '/favicon.png',
@@ -15,49 +20,117 @@ const STATIC_ASSETS = [
 // Install: precache offline fallback shell and key static icons
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(STATIC_ASSETS);
-    }).then(() => self.skipWaiting())
+    caches
+      .open(CACHE_NAME)
+      .then((cache) => {
+        return cache.addAll(STATIC_PRECACHE).catch((err) => {
+          console.warn('[SW PRECACHE WARN] Some precache routes skipped during build:', err);
+        });
+      })
+      .then(() => self.skipWaiting())
   );
 });
 
 // Activate: clean up outdated caches
 self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches.keys().then((cacheNames) => {
-      return Promise.all(
-        cacheNames
-          .filter((name) => name.startsWith('cruvels-') && name !== CACHE_NAME)
-          .map((name) => caches.delete(name))
-      );
-    }).then(() => self.clients.claim())
+    caches
+      .keys()
+      .then((cacheNames) => {
+        return Promise.all(
+          cacheNames
+            .filter((name) => name.startsWith('cruvels-') && name !== CACHE_NAME && name !== RUNTIME_CACHE)
+            .map((name) => caches.delete(name))
+        );
+      })
+      .then(() => self.clients.claim())
   );
 });
 
-// Fetch: network-first with offline fallback for navigation; bypass cache for API
+// Fetch: Stale-While-Revalidate and Network-First for offline Subway resilience
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
 
-  // Always bypass cache for API calls, Next.js server actions, internal chunks, or non-GET requests
-  if (
-    event.request.method !== 'GET' ||
-    url.pathname.startsWith('/api/') ||
-    url.pathname.startsWith('/_next/')
-  ) {
+  // Non-GET requests should always be passed to network
+  if (event.request.method !== 'GET') {
     return;
   }
 
-  // Navigation requests: try network first, fallback to offline shell if offline
-  if (event.request.mode === 'navigate') {
+  // 1. API: Schedule caching for offline operational agenda access
+  if (url.pathname === '/api/schedule') {
     event.respondWith(
-      fetch(event.request).catch(() => {
-        return caches.match('/offline.html');
+      fetch(event.request)
+        .then((networkRes) => {
+          if (networkRes && networkRes.status === 200) {
+            const clone = networkRes.clone();
+            caches.open(RUNTIME_CACHE).then((cache) => cache.put(event.request, clone));
+          }
+          return networkRes;
+        })
+        .catch(() => {
+          return caches.match(event.request).then((cached) => {
+            if (cached) return cached;
+            return new Response(JSON.stringify({ events: [], success: true, offline: true }), {
+              headers: { 'Content-Type': 'application/json' },
+            });
+          });
+        })
+    );
+    return;
+  }
+
+  // Bypass other non-cacheable APIs
+  if (url.pathname.startsWith('/api/')) {
+    return;
+  }
+
+  // 2. Next.js Static Chunks & Scripts (/_next/static/...) -> Stale-While-Revalidate
+  if (url.pathname.startsWith('/_next/static/')) {
+    event.respondWith(
+      caches.match(event.request).then((cachedResponse) => {
+        const fetchPromise = fetch(event.request)
+          .then((networkResponse) => {
+            if (networkResponse && networkResponse.status === 200) {
+              const clone = networkResponse.clone();
+              caches.open(RUNTIME_CACHE).then((cache) => cache.put(event.request, clone));
+            }
+            return networkResponse;
+          })
+          .catch(() => cachedResponse);
+
+        return cachedResponse || fetchPromise;
       })
     );
     return;
   }
 
-  // Static assets (images, icons, fonts): cache-first with network fallback
+  // 3. Navigation Requests (HTML Pages like /dashboard, /schedule) -> Network First with Shell Cache
+  if (event.request.mode === 'navigate') {
+    event.respondWith(
+      fetch(event.request)
+        .then((networkResponse) => {
+          if (networkResponse && networkResponse.status === 200) {
+            const clone = networkResponse.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+          }
+          return networkResponse;
+        })
+        .catch(() => {
+          // Offline Subway fallback: try specific requested page first
+          return caches.match(event.request).then((matched) => {
+            if (matched) return matched;
+            // Fallback to cached dashboard or schedule or offline shell
+            if (url.pathname.startsWith('/schedule')) {
+              return caches.match('/schedule').then((sched) => sched || caches.match('/offline.html'));
+            }
+            return caches.match('/dashboard').then((dash) => dash || caches.match('/offline.html'));
+          });
+        })
+    );
+    return;
+  }
+
+  // 4. Static Images, Icons, and Fonts -> Cache First
   if (
     url.pathname.startsWith('/icons/') ||
     url.pathname.endsWith('.png') ||
@@ -68,18 +141,16 @@ self.addEventListener('fetch', (event) => {
   ) {
     event.respondWith(
       caches.match(event.request).then((cachedResponse) => {
-        if (cachedResponse) {
-          return cachedResponse;
-        }
-        return fetch(event.request).then((networkResponse) => {
-          if (networkResponse && networkResponse.status === 200) {
-            const responseClone = networkResponse.clone();
-            caches.open(CACHE_NAME).then((cache) => {
-              cache.put(event.request, responseClone);
-            });
-          }
-          return networkResponse;
-        });
+        if (cachedResponse) return cachedResponse;
+        return fetch(event.request)
+          .then((networkResponse) => {
+            if (networkResponse && networkResponse.status === 200) {
+              const clone = networkResponse.clone();
+              caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+            }
+            return networkResponse;
+          })
+          .catch(() => cachedResponse);
       })
     );
   }
@@ -99,41 +170,24 @@ self.addEventListener('push', function (event) {
       data: {
         url: data.link_url || data.url || '/dashboard',
       },
-      tag: data.tag || 'cruvels-notification',
-      renotify: true,
       vibrate: [200, 100, 200],
     };
 
     event.waitUntil(self.registration.showNotification(title, options));
   } catch (err) {
-    console.error('[SW Push Error]', err);
+    console.error('[SW PUSH ERROR]', err);
   }
 });
 
-// Push Notification Click Action
+// Push Notification Click
 self.addEventListener('notificationclick', function (event) {
   event.notification.close();
-  const rawUrl = event.notification.data?.url || '/dashboard';
-
-  // Security: Ensure targetUrl is strictly from this origin
-  let targetUrl = '/dashboard';
-  if (typeof rawUrl === 'string') {
-    if (rawUrl.startsWith('/') && !rawUrl.startsWith('//')) {
-      targetUrl = rawUrl;
-    } else {
-      try {
-        const parsed = new URL(rawUrl, self.location.origin);
-        if (parsed.origin === self.location.origin) {
-          targetUrl = parsed.pathname + parsed.search + parsed.hash;
-        }
-      } catch (e) {}
-    }
-  }
+  const targetUrl = event.notification.data?.url || '/dashboard';
 
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function (clientList) {
       for (const client of clientList) {
-        if (client.url.includes(self.location.origin) && 'focus' in client) {
+        if (client.url.includes(targetUrl) && 'focus' in client) {
           return client.focus();
         }
       }
@@ -142,23 +196,4 @@ self.addEventListener('notificationclick', function (event) {
       }
     })
   );
-});
-
-// Client Message Handling
-self.addEventListener('message', function (event) {
-  if (event.data && event.data.type === 'SHOW_NOTIFICATION') {
-    const title = event.data.title || 'Cruvels Workplace OS';
-    const options = {
-      body: event.data.message || 'You have a new workplace update.',
-      icon: '/icon-192.png',
-      badge: '/favicon.png',
-      data: {
-        url: event.data.url || '/dashboard',
-      },
-      tag: 'cruvels-' + Date.now(),
-      renotify: true,
-      vibrate: [200, 100, 200],
-    };
-    event.waitUntil(self.registration.showNotification(title, options));
-  }
 });

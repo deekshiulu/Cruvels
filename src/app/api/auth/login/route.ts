@@ -137,9 +137,14 @@ export async function POST(req: NextRequest) {
       req,
     });
 
+    const employee = await dataStore.getEmployeeByUserId(user.id);
+    const group = employee?.group_id ? await dataStore.getGroupById(employee.group_id) : null;
+    const department = employee?.department_id ? await dataStore.getDepartmentById(employee.department_id) : null;
+
     const response = NextResponse.json({
       success: true,
       mustChangePassword,
+      token: sessionToken,
       user: {
         id: user.id,
         name: user.name,
@@ -149,6 +154,10 @@ export async function POST(req: NextRequest) {
         assignedAliases: activeAliases,
         primaryAlias: activeAliases[0] || `${user.username}@cruvels.com`,
         mustChangePassword,
+        employeeId: employee?.id || null,
+        designation: employee?.designation || null,
+        squad: group?.name || null,
+        department: department?.name || null,
       },
     });
 

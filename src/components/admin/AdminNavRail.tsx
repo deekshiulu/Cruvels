@@ -14,10 +14,12 @@ import {
   Calendar,
   ShieldAlert,
   Sliders,
+  Activity,
 } from 'lucide-react';
 
 export type AdminSectionId =
   | 'overview'
+  | 'analytics'
   | 'workforce'
   | 'attendance'
   | 'compliance'
@@ -46,6 +48,16 @@ export const ADMIN_SECTIONS: AdminNavSection[] = [
     description: 'System health & KPI telemetry',
     href: '/admin',
     icon: LayoutDashboard,
+  },
+  {
+    id: 'analytics',
+    label: 'Analytics Pipeline',
+    description: 'Productivity & attendance trends',
+    href: '/admin/analytics',
+    icon: Activity,
+    badge: 'Live',
+    badgeColor: 'bg-blue-100 text-blue-700 border-blue-200',
+    isExternalPath: true,
   },
   {
     id: 'workforce',
@@ -121,20 +133,24 @@ export const ADMIN_SECTIONS: AdminNavSection[] = [
   },
 ];
 
-interface AdminNavRailProps {
+export interface AdminNavRailProps {
   currentTab?: AdminSectionId;
+  currentSection?: AdminSectionId;
   onTabChange?: (tab: AdminSectionId) => void;
 }
 
-function AdminNavRailContent({ currentTab, onTabChange }: AdminNavRailProps) {
+function AdminNavRailContent({ currentTab, currentSection, onTabChange }: AdminNavRailProps) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const router = useRouter();
 
   // Determine active section
   let activeId: AdminSectionId = 'overview';
-  if (currentTab) {
-    activeId = currentTab;
+  const selectedTab = currentSection || currentTab;
+  if (selectedTab) {
+    activeId = selectedTab;
+  } else if (pathname === '/admin/analytics') {
+    activeId = 'analytics';
   } else if (pathname === '/admin/attendance-compliance') {
     activeId = 'compliance';
   } else if (pathname === '/admin/acknowledgements') {

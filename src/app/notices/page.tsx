@@ -19,6 +19,7 @@ import {
 import { Notice, AuthSessionUser } from '@/lib/db/types';
 import { AcknowledgementAction } from '@/components/common/AcknowledgementAction';
 import { clientCache } from '@/lib/cache/clientCache';
+import { showError } from '@/lib/utils/toast';
 
 export default function NoticeBoardPage() {
   const [notices, setNotices] = useState<Notice[]>(() => {
@@ -159,7 +160,7 @@ export default function NoticeBoardPage() {
         setTimeout(() => setNotification(null), 3000);
       }
     } catch {
-      alert('Failed to delete notice.');
+      showError('Failed to delete notice.');
     }
   };
 
@@ -191,21 +192,21 @@ export default function NoticeBoardPage() {
     <AppShell>
       <div className="space-y-6 max-w-6xl mx-auto">
         {/* Header */}
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-50 text-amber-600 border border-amber-200">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 min-w-0">
+          <div className="flex items-center gap-3 min-w-0 flex-1">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-50 text-amber-600 border border-amber-200">
               <Megaphone className="h-5 w-5" />
             </div>
-            <div>
-              <h1 className="text-xl font-bold text-slate-900 tracking-tight">Company Notice Board</h1>
-              <p className="text-xs text-slate-500">Official organizational bulletins, updates & broadcasts</p>
+            <div className="min-w-0 flex-1">
+              <h1 className="text-xl font-bold tracking-tight truncate" style={{ color: 'var(--ink)' }}>Company Notice Board</h1>
+              <p className="text-xs truncate sm:text-clip" style={{ color: 'var(--muted)' }}>Official organizational bulletins, updates & broadcasts</p>
             </div>
           </div>
 
           {isAdminOrManager && (
             <button
               onClick={openCreateModal}
-              className="glow-btn-primary flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-bold text-white tracking-wide shadow-sm"
+              className="glow-btn-primary flex items-center justify-center gap-2 rounded-xl px-4 py-2 text-xs font-bold text-white tracking-wide shadow-sm w-full sm:w-auto shrink-0"
             >
               <Plus className="h-4 w-4" />
               <span>Publish Announcement</span>

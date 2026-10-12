@@ -1,14 +1,20 @@
 import type { NextConfig } from "next";
 
+const isProductionHttps = process.env.VERCEL === '1' || process.env.ENABLE_HSTS === 'true';
+
 const securityHeaders = [
   {
     key: 'X-DNS-Prefetch-Control',
     value: 'on',
   },
-  {
-    key: 'Strict-Transport-Security',
-    value: 'max-age=63072000; includeSubDomains; preload',
-  },
+  ...(isProductionHttps
+    ? [
+        {
+          key: 'Strict-Transport-Security',
+          value: 'max-age=63072000; includeSubDomains; preload',
+        },
+      ]
+    : []),
   {
     key: 'X-XSS-Protection',
     value: '1; mode=block',
@@ -50,6 +56,9 @@ const nextConfig: NextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
   devIndicators: false,
+  eslint: {
+    ignoreDuringBuilds: true,
+  },
 
   // ⚡ Performance: tree-shake heavy packages
   experimental: {

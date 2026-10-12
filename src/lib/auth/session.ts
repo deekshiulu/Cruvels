@@ -14,11 +14,18 @@ function getJwtSecret(): Uint8Array {
 }
 
 export function applySessionCookie(response: NextResponse, token: string, rememberMe = false): void {
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || '';
+  const isLocalHttp =
+    appUrl.startsWith('http://localhost') ||
+    appUrl.startsWith('http://127.0.0.1') ||
+    appUrl.startsWith('http://192.168.') ||
+    appUrl.startsWith('http://10.0.2.2');
+
   const cookieOptions: any = {
     name: AUTH_COOKIE_NAME,
     value: token,
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
+    secure: process.env.NODE_ENV === 'production' && !isLocalHttp,
     sameSite: 'lax',
     path: '/',
   };

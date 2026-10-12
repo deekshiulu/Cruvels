@@ -25,6 +25,7 @@ import {
 } from 'lucide-react';
 import { DriveResource, DriveSection, DriveFileType } from '@/lib/db/types';
 import { clientCache } from '@/lib/cache/clientCache';
+import { showError, showSuccess } from '@/lib/utils/toast';
 
 const SECTION_CONFIG: { id: DriveSection; label: string; icon: React.ElementType; description: string }[] = [
   { id: 'company_resources', label: 'Company Resources', icon: Globe,       description: 'Official company guidelines, brand assets, and standard templates.' },
@@ -150,15 +151,16 @@ export default function GoogleDrivePage() {
     try {
       const res = await fetch(`/api/drive/${id}`, { method: 'DELETE' });
       if (res.ok) {
+        showSuccess('Resource unlinked.');
         setNotification('Resource unlinked.');
         fetchResources();
         setTimeout(() => setNotification(null), 4000);
       } else {
         const d = await res.json();
-        alert(d.error || 'Failed to remove resource.');
+        showError(d.error || 'Failed to remove resource.');
       }
     } catch {
-      alert('Network error unlinking resource.');
+      showError('Network error unlinking resource.');
     }
   };
 

@@ -23,6 +23,7 @@ import {
   Check,
 } from 'lucide-react';
 import { TaskItem, Employee } from '@/lib/db/types';
+import { showError, showSuccess } from '@/lib/utils/toast';
 
 const COL_CONFIG: { id: TaskItem['status']; label: string; accent: string }[] = [
   { id: 'todo',        label: 'To Do',       accent: '#6B7E7A' },
@@ -271,14 +272,15 @@ export default function TasksPage() {
       const res = await fetch(`/api/tasks/${taskId}/acknowledge`, { method: 'POST' });
       const d = await res.json();
       if (res.ok && d.success) {
+        showSuccess('Task receipt acknowledged!');
         setNotification('Task receipt acknowledged!');
         fetchTasks();
         setTimeout(() => setNotification(null), 4000);
       } else {
-        alert(d.error || 'Failed to acknowledge task.');
+        showError(d.error || 'Failed to acknowledge task.');
       }
     } catch {
-      alert('Network error while acknowledging.');
+      showError('Network error while acknowledging.');
     }
   };
 
@@ -294,14 +296,15 @@ export default function TasksPage() {
       });
       const d = await res.json();
       if (res.ok && d.success) {
+        showSuccess('Comment posted successfully!');
         setNewComment('');
         setSelectedTask(d.task);
         fetchTasks();
       } else {
-        alert(d.error || 'Failed to post comment.');
+        showError(d.error || 'Failed to post comment.');
       }
     } catch {
-      alert('Network error posting comment.');
+      showError('Network error posting comment.');
     } finally {
       setCommentSubmitting(false);
     }
@@ -312,19 +315,19 @@ export default function TasksPage() {
     <AppShell>
       <div className="flex flex-col h-full gap-0" style={{ color: 'var(--ink)' }}>
         {/* Page Title Strip */}
-        <div className="pb-3 mb-3 flex items-center justify-between" style={{ borderBottom: '1px solid var(--line)' }}>
-          <div>
+        <div className="pb-3 mb-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 min-w-0" style={{ borderBottom: '1px solid var(--line)' }}>
+          <div className="min-w-0 flex-1">
             <h1
-              className="text-lg font-bold"
+              className="text-lg font-bold truncate"
               style={{ fontFamily: 'Bricolage Grotesque, sans-serif', color: 'var(--ink)' }}
             >
               Tasks Module
             </h1>
-            <p className="text-xs mt-0.5" style={{ color: 'var(--muted)' }}>
+            <p className="text-xs mt-0.5 truncate sm:text-clip" style={{ color: 'var(--muted)' }}>
               Collaborative 5-Stage Workflow, POC Supervision & Universal Acknowledgement
             </p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 shrink-0">
             <span className="text-xs px-2.5 py-1 rounded-full font-semibold border" style={{ background: 'var(--surface)', borderColor: 'var(--line)', color: 'var(--muted)' }}>
               {tasks.length} Total Tasks
             </span>
@@ -410,7 +413,7 @@ export default function TasksPage() {
           {/* New Task button */}
           <button
             onClick={openCreateModal}
-            className="glow-btn-primary rounded-md px-4 py-1.5 text-xs font-bold flex items-center gap-1.5"
+            className="glow-btn-primary rounded-md px-4 py-1.5 text-xs font-bold flex items-center justify-center gap-1.5 w-full sm:w-auto"
           >
             <Plus className="h-3.5 w-3.5" /> New Task
           </button>

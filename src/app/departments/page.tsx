@@ -20,6 +20,7 @@ import {
   Shield,
 } from 'lucide-react';
 import { Department, Group, Employee } from '@/lib/db/types';
+import { showSuccess, showError } from '@/lib/utils/toast';
 
 export default function DepartmentsPage() {
   const router = useRouter();
@@ -163,14 +164,15 @@ export default function DepartmentsPage() {
       const res = await fetch(`/api/departments/${deptId}`, { method: 'DELETE' });
       const data = await res.json();
       if (res.ok && data.success) {
+        showSuccess(`Department "${deptName}" deleted.`);
         setNotification(`Department "${deptName}" deleted.`);
         fetchData();
         setTimeout(() => setNotification(null), 4000);
       } else {
-        alert(data.error || 'Failed to delete department.');
+        showError(data.error || 'Failed to delete department.');
       }
     } catch {
-      alert('Network error.');
+      showError('Network error.');
     }
   };
 
@@ -241,14 +243,15 @@ export default function DepartmentsPage() {
       const res = await fetch(`/api/groups/${groupId}`, { method: 'DELETE' });
       const data = await res.json();
       if (res.ok && data.success) {
+        showSuccess(`Squad "${name}" deleted.`);
         setNotification(`Squad "${name}" deleted.`);
         fetchData();
         setTimeout(() => setNotification(null), 4000);
       } else {
-        alert(data.error || 'Failed to delete group.');
+        showError(data.error || 'Failed to delete group.');
       }
     } catch {
-      alert('Network error.');
+      showError('Network error.');
     }
   };
 
@@ -256,26 +259,26 @@ export default function DepartmentsPage() {
     <AppShell>
       <div className="space-y-6 max-w-6xl mx-auto">
         {/* Header & Tabs */}
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50 text-blue-600 border border-blue-200">
+        <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 min-w-0">
+          <div className="flex items-center gap-3 min-w-0 flex-1">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600 border border-blue-200">
               <Building2 className="h-5 w-5" />
             </div>
-            <div>
-              <h1 className="text-xl font-bold tracking-tight" style={{ color: 'var(--ink)' }}>Organization &amp; Squads</h1>
-              <p className="text-xs" style={{ color: 'var(--muted)' }}>Manage departments and group hierarchies with Group Leaders (GL)</p>
+            <div className="min-w-0 flex-1">
+              <h1 className="text-xl font-bold tracking-tight truncate" style={{ color: 'var(--ink)' }}>Organization &amp; Squads</h1>
+              <p className="text-xs truncate sm:text-clip" style={{ color: 'var(--muted)' }}>Manage departments and group hierarchies with Group Leaders (GL)</p>
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto">
             <div
-              className="flex rounded-2xl p-1 border text-xs font-bold"
+              className="flex rounded-2xl p-1 border text-xs font-bold w-full sm:w-auto"
               style={{ background: 'var(--surface-2)', borderColor: 'var(--line)' }}
             >
               <button
                 type="button"
                 onClick={() => setActiveTab('departments')}
-                className={`flex items-center gap-1.5 rounded-xl px-3 py-1.5 transition-all cursor-pointer ${
+                className={`flex-1 sm:flex-none flex items-center justify-center gap-1.5 rounded-xl px-3 py-1.5 transition-all cursor-pointer ${
                   activeTab === 'departments' ? 'tab-btn-active' : 'tab-btn-inactive'
                 }`}
               >
@@ -285,7 +288,7 @@ export default function DepartmentsPage() {
               <button
                 type="button"
                 onClick={() => setActiveTab('groups')}
-                className={`flex items-center gap-1.5 rounded-xl px-3 py-1.5 transition-all cursor-pointer ${
+                className={`flex-1 sm:flex-none flex items-center justify-center gap-1.5 rounded-xl px-3 py-1.5 transition-all cursor-pointer ${
                   activeTab === 'groups' ? 'tab-btn-active' : 'tab-btn-inactive'
                 }`}
               >
@@ -298,7 +301,7 @@ export default function DepartmentsPage() {
               activeTab === 'departments' ? (
                 <button
                   onClick={openAddDept}
-                  className="glow-btn-primary flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-bold text-white tracking-wide shadow-sm"
+                  className="glow-btn-primary flex items-center justify-center gap-2 rounded-xl px-4 py-2 text-xs font-bold text-white tracking-wide shadow-sm w-full sm:w-auto shrink-0"
                 >
                   <Plus className="h-4 w-4" />
                   <span>New Department</span>
@@ -306,7 +309,7 @@ export default function DepartmentsPage() {
               ) : (
                 <button
                   onClick={openAddGroup}
-                  className="glow-btn-primary flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-bold text-white tracking-wide shadow-sm"
+                  className="glow-btn-primary flex items-center justify-center gap-2 rounded-xl px-4 py-2 text-xs font-bold text-white tracking-wide shadow-sm w-full sm:w-auto shrink-0"
                 >
                   <Plus className="h-4 w-4" />
                   <span>New Squad</span>
@@ -525,10 +528,23 @@ export default function DepartmentsPage() {
                                 </div>
                                 <div className="text-[11px] text-purple-700 font-mono truncate flex items-center gap-1 mt-0.5">
                                   <Mail className="h-3 w-3 shrink-0" />
-                                  <span>{m.email}</span>
+                                  <a
+                                    href={`mailto:${m.email}`}
+                                    className="hover:underline hover:text-purple-900 transition-colors"
+                                    title={`Email ${m.email}`}
+                                  >
+                                    {m.email}
+                                  </a>
                                 </div>
                                 <div className="text-[10px] text-slate-500 mt-0.5">
-                                  {m.designation} • {m.phone || '+91 90000 00000'}
+                                  {m.designation} •{' '}
+                                  <a
+                                    href={`tel:${(m.phone || '+91 90000 00000').replace(/[\s-]/g, '')}`}
+                                    className="hover:underline hover:text-purple-700 transition-colors"
+                                    title={`Call ${m.phone || '+91 90000 00000'}`}
+                                  >
+                                    {m.phone || '+91 90000 00000'}
+                                  </a>
                                 </div>
                               </div>
                               <button

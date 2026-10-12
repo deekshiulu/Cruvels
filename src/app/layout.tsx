@@ -1,19 +1,27 @@
 import type { Metadata, Viewport } from 'next';
 import './globals.css';
 import ThemeProvider from '@/components/layout/ThemeProvider';
+import NotificationPrompt from '@/components/layout/NotificationPrompt';
 
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
-  maximumScale: 5,
+  maximumScale: 1,
+  userScalable: false,
   viewportFit: 'cover',
   themeColor: [
-    { media: '(prefers-color-scheme: light)', color: '#FFFFFF' },
-    { media: '(prefers-color-scheme: dark)', color: '#070E1A' },
+    { media: '(prefers-color-scheme: light)', color: '#0B132B' },
+    { media: '(prefers-color-scheme: dark)', color: '#0B132B' },
   ],
 };
 
 export const metadata: Metadata = {
+  manifest: '/manifest.webmanifest',
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'default',
+    title: 'Cruvels Portal',
+  },
   title: {
     default: 'Cruvels Internal Portal — Workplace Management System',
     template: '%s | Cruvels Internal Portal',
@@ -94,6 +102,7 @@ export default function RootLayout({
         style={{ background: 'var(--paper)', color: 'var(--ink)' }}
       >
         <ThemeProvider>
+          <NotificationPrompt />
           {children}
         </ThemeProvider>
       </body>

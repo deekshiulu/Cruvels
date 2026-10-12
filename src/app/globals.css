@@ -48,7 +48,7 @@
    ──────────────────────────────────────────────────────────────────────────── */
 .dark,
 [data-theme="dark"] {
-  --paper:        #070E1A;   /* Deepest Abyssal Midnight Navy canvas */
+  --paper:        #0B132B;   /* Deepest Abyssal Midnight Navy canvas */
   --surface:      #0D192B;   /* Rich dark navy card, rail, and modal surface */
   --surface-2:    #13233B;   /* Deep Navy Slate for tracks, secondary zones */
   --ink:          #FFFFFF;   /* Pure crisp white primary text on dark theme */
@@ -84,7 +84,7 @@
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]):not(.light) {
-    --paper:        #070E1A;
+    --paper:        #0B132B;
     --surface:      #0D192B;
     --surface-2:    #13233B;
     --surface-hover:#192E4D;
@@ -120,14 +120,18 @@
    Set typography and background from tokens
    ──────────────────────────────────────────────────────────────────────────── */
 @layer base {
-  html {
-    background-color: var(--paper);
+  html, body {
+    background-color: #0B132B;
     color: var(--ink);
     -webkit-text-size-adjust: 100%;
+    overflow-x: hidden;
+    max-width: 100%;
+    width: 100%;
+    overscroll-behavior-x: none;
   }
 
   body {
-    background-color: var(--paper);
+    background-color: #0B132B;
     color: var(--ink);
     font-family: 'Archivo', system-ui, -apple-system, sans-serif;
     font-size: 14px;
@@ -135,6 +139,9 @@
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     overflow-x: hidden;
+    position: relative;
+    max-width: 100vw;
+    touch-action: pan-y; /* Allows vertical scrolling while disabling horizontal pan-bounce and zoom */
   }
 
   h1, h2, h3, h4, h5, h6 {
@@ -181,6 +188,13 @@
   select {
     min-height: 44px;
     touch-action: manipulation;
+  }
+
+  /* Prevent automatic mobile Chrome/Safari zoom on input focus */
+  input,
+  textarea,
+  select {
+    font-size: 16px !important;
   }
 
   /* Clickable cards (div with onClick) */
@@ -923,6 +937,12 @@ html, body {
     min-height: 44px;
   }
 }
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  20%, 60% { transform: translateX(-8px); }
+  40%, 80% { transform: translateX(8px); }
+}
 
-
-
+.animate-shake {
+  animation: shake 0.4s ease-in-out;
+}

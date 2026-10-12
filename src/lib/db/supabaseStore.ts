@@ -1326,7 +1326,15 @@ export class SupabaseDataStore {
   public async getScheduleEvents(): Promise<ScheduleEvent[]> {
     const { data, error } = await db().from('schedule_events').select('*').order('start_time');
     if (error) err(error, 'Failed to list schedule');
-    return (data || []).map((e: any) => ({ ...e, attendee_ids: e.attendee_ids || [] }));
+    const list = (data || []).map((e: any) => ({ ...e, attendee_ids: e.attendee_ids || [] }));
+    const seenHolidays = new Set<string>();
+    return list.filter((e: ScheduleEvent) => {
+      if (e.event_type !== 'holiday') return true;
+      const d = e.start_time.split('T')[0];
+      if (seenHolidays.has(d)) return false;
+      seenHolidays.add(d);
+      return true;
+    });
   }
 
   public async createScheduleEvent(data: Omit<ScheduleEvent, 'id' | 'created_at'>): Promise<ScheduleEvent> {
@@ -1350,7 +1358,34 @@ export class SupabaseDataStore {
     const now = new Date().toISOString();
 
     for (const ev of events) {
-      if (ev.external_event_id) {
+      if (ev.event_type === 'holiday') {
+        const evDate = ev.start_time.split('T')[0];
+        const { data: existing } = await db()
+          .from('schedule_events')
+          .select('id')
+          .eq('event_type', 'holiday')
+          .gte('start_time', `${evDate}T00:00:00`)
+          .lte('start_time', `${evDate}T23:59:59`)
+          .maybeSingle();
+
+        if (existing) {
+          const { error } = await db()
+            .from('schedule_events')
+            .update({
+              title: ev.title,
+              description: ev.description,
+              start_time: ev.start_time,
+              end_time: ev.end_time,
+              location: ev.location,
+              source: ev.source,
+              sync_provider: ev.sync_provider,
+              sync_account_email: ev.sync_account_email,
+            })
+            .eq('id', existing.id);
+          if (!error) updated++;
+          continue;
+        }
+      } else if (ev.external_event_id) {
         const { data: existing } = await db()
           .from('schedule_events')
           .select('id')

@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { LeaveRequest, LeaveBalances } from '@/lib/db/types';
 import { clientCache } from '@/lib/cache/clientCache';
+import { showError, showSuccess } from '@/lib/utils/toast';
 
 export default function LeavesPage() {
   const [leaves, setLeaves] = useState<LeaveRequest[]>(() => {
@@ -130,14 +131,15 @@ export default function LeavesPage() {
       });
       const data = await res.json();
       if (res.ok && data.success) {
+        showSuccess('Leave request cancelled.');
         setNotification('Leave request cancelled.');
         fetchLeaves();
         setTimeout(() => setNotification(null), 4000);
       } else {
-        alert(data.error || 'Failed to cancel leave.');
+        showError(data.error || 'Failed to cancel leave.');
       }
     } catch {
-      alert('Failed to cancel leave.');
+      showError('Failed to cancel leave.');
     }
   };
 
@@ -149,12 +151,13 @@ export default function LeavesPage() {
         body: JSON.stringify({ leaveId, status }),
       });
       if (res.ok) {
+        showSuccess(`Leave request marked as ${status}.`);
         setNotification(`Leave request marked as ${status}.`);
         fetchLeaves();
         setTimeout(() => setNotification(null), 4000);
       }
     } catch {
-      alert('Failed to update leave status.');
+      showError('Failed to update leave status.');
     }
   };
 
@@ -175,20 +178,20 @@ export default function LeavesPage() {
     <AppShell>
       <div className="space-y-6 max-w-6xl mx-auto">
         {/* Header */}
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50 text-blue-600 border border-blue-200">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 min-w-0">
+          <div className="flex items-center gap-3 min-w-0 flex-1">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600 border border-blue-200">
               <CalendarDays className="h-5 w-5" />
             </div>
-            <div>
-              <h1 className="text-xl font-bold text-slate-900 tracking-tight">Time Off & Leave Management</h1>
-              <p className="text-xs text-slate-500">Track leave balances, submit requests, and manage GL/Manager approvals</p>
+            <div className="min-w-0 flex-1">
+              <h1 className="text-xl font-bold tracking-tight truncate" style={{ color: 'var(--ink)' }}>Time Off & Leave Management</h1>
+              <p className="text-xs truncate sm:text-clip" style={{ color: 'var(--muted)' }}>Track leave balances, submit requests, and manage GL/Manager approvals</p>
             </div>
           </div>
 
           <button
             onClick={() => setShowApplyModal(true)}
-            className="glow-btn-primary flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-bold text-white tracking-wide shadow-sm"
+            className="glow-btn-primary flex items-center justify-center gap-2 rounded-xl px-4 py-2 text-xs font-bold text-white tracking-wide shadow-sm w-full sm:w-auto shrink-0"
           >
             <Plus className="h-4 w-4" />
             <span>Apply for Time Off</span>

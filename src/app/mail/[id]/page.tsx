@@ -36,6 +36,7 @@ import DOMPurify from 'dompurify';
 import AppShell from '@/components/layout/AppShell';
 import MailNavRail from '@/components/mail/MailNavRail';
 import MailReminderModal from '@/components/mail/MailReminderModal';
+import { showError, showSuccess } from '@/lib/utils/toast';
 
 interface SafeAttachmentItem {
   id: string;
@@ -140,9 +141,10 @@ export default function MessageDetailPage({
     if (!confirm('Move this message to trash?')) return;
     try {
       await fetch(`/api/messages/${id}`, { method: 'DELETE' });
+      showSuccess('Message moved to trash.');
       router.push('/mail/inbox');
     } catch {
-      alert('Failed to delete message.');
+      showError('Failed to delete message.');
     }
   };
 
@@ -173,13 +175,13 @@ export default function MessageDetailPage({
         const updatedFolder = isCurrentlySpam ? 'inbox' : 'spam';
         setMessage({ ...message, folder: updatedFolder as any, is_spam: !isCurrentlySpam });
         clientCache.invalidate('inbox');
-        setSpamNotification(
-          isCurrentlySpam ? 'Message restored to Inbox.' : 'Message moved to Spam Quarantine.'
-        );
+        const msgText = isCurrentlySpam ? 'Message restored to Inbox.' : 'Message moved to Spam Quarantine.';
+        showSuccess(msgText);
+        setSpamNotification(msgText);
         setTimeout(() => setSpamNotification(null), 4000);
       }
     } catch {
-      alert('Failed to update spam status.');
+      showError('Failed to update spam status.');
     }
   };
 
@@ -342,13 +344,14 @@ export default function MessageDetailPage({
 
       const data = await res.json();
       if (res.ok && data.success) {
+        showSuccess('Event synced to Cruvels Schedule for tomorrow at 10:00 AM IST.');
         setScheduleSuccess(`Event synced to Cruvels Schedule! Scheduled for tomorrow at 10:00 AM IST.`);
         setTimeout(() => setScheduleSuccess(null), 5000);
       } else {
-        alert(data.error || 'Failed to auto-add to schedule.');
+        showError(data.error || 'Failed to auto-add to schedule.');
       }
     } catch {
-      alert('Network error while scheduling event.');
+      showError('Network error while scheduling event.');
     } finally {
       setAddingToSchedule(false);
     }

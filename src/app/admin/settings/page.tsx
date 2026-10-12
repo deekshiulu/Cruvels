@@ -21,6 +21,7 @@ import {
   Globe,
 } from 'lucide-react';
 import { SystemSettings, PublicHolidayDefinition, DEFAULT_SYSTEM_SETTINGS } from '@/lib/db/types';
+import { showError, showSuccess } from '@/lib/utils/toast';
 
 const DAYS_OF_WEEK = [
   { id: 1, label: 'Monday', short: 'Mon' },
@@ -58,7 +59,7 @@ export default function AdminSystemSettingsPage() {
     try {
       const res = await fetch('/api/admin/settings');
       if (res.status === 403) {
-        alert('Access denied. Administrator privileges required.');
+        showError('Access denied. Administrator privileges required.');
         router.push('/dashboard');
         return;
       }
@@ -136,7 +137,7 @@ export default function AdminSystemSettingsPage() {
     let nextDays: number[];
     if (currentDays.includes(dayId)) {
       if (currentDays.length === 1) {
-        alert('At least one working day must remain configured.');
+        showError('At least one working day must remain configured.');
         return;
       }
       nextDays = currentDays.filter((d) => d !== dayId);
@@ -155,7 +156,7 @@ export default function AdminSystemSettingsPage() {
   const handleAddHoliday = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!holidayName.trim() || !holidayDate) {
-      alert('Holiday name and date are required.');
+      showError('Holiday name and date are required.');
       return;
     }
     setAddingHoliday(true);

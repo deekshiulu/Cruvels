@@ -28,6 +28,8 @@ import {
   Check,
   CalendarCheck,
   ShieldCheck,
+  CloudOff,
+  WifiOff,
 } from 'lucide-react';
 import { ScheduleEvent, EventType } from '@/lib/db/types';
 import { clientCache } from '@/lib/cache/clientCache';
@@ -107,6 +109,13 @@ export default function SchedulePage() {
   const [notification, setNotification] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [creationWarnings, setCreationWarnings] = useState<string[]>([]);
+  const [isOffline, setIsOffline] = useState(() => (typeof window !== 'undefined' ? !navigator.onLine : false));
+  const [lastSyncTimestamp, setLastSyncTimestamp] = useState<string | null>(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('cruvels_schedule_last_sync') || null;
+    }
+    return null;
+  });
 
   // calendar nav
   const [calYear, setCalYear] = useState(today.getFullYear());
@@ -130,13 +139,72 @@ export default function SchedulePage() {
       const res = await fetch('/api/schedule');
       if (res.ok) {
         const d = await res.json();
-        setEvents(d.events || []);
-        clientCache.set('schedule_events', undefined, d.events || []);
+        const rawList: ScheduleEvent[] = d.events || [];
+        // Deduplicate before setting state to avoid duplicate items on re-renders / Strict Mode
+        const seen = new Set<string>();
+        const deduped = rawList.filter((ev) => {
+          const dStr = ev.start_time ? ev.start_time.split('T')[0] : '';
+          const normTitle = ev.title.toLowerCase().replace(/\(.*?\)/g, '').replace(/[^a-z0-9]/g, '');
+          const key = ev.event_type === 'holiday'
+            ? `${dStr}_holiday_${normTitle.slice(0, 5)}`
+            : `${dStr}_${ev.event_type}_${normTitle}`;
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        });
+        setEvents(deduped);
+        clientCache.set('schedule_events', undefined, deduped);
+        const nowFormatted =
+          new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) +
+          ', ' +
+          new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        setLastSyncTimestamp(nowFormatted);
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('cruvels_schedule_last_sync', nowFormatted);
+        }
+        if (d.offline) {
+          setIsOffline(true);
+        } else {
+          setIsOffline(false);
+        }
+      } else {
+        const cached = clientCache.get<ScheduleEvent[]>('schedule_events');
+        if (cached && cached.length > 0) {
+          setEvents(cached);
+        }
+      }
+    } catch {
+      setIsOffline(true);
+      const cached = clientCache.get<ScheduleEvent[]>('schedule_events');
+      if (cached && cached.length > 0) {
+        setEvents(cached);
       }
     } finally {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    const handleOnline = () => {
+      setIsOffline(false);
+      fetchSchedule();
+    };
+    const handleOffline = () => {
+      setIsOffline(true);
+    };
+
+    if (typeof window !== 'undefined') {
+      setIsOffline(!navigator.onLine);
+      window.addEventListener('online', handleOnline);
+      window.addEventListener('offline', handleOffline);
+    }
+    return () => {
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('online', handleOnline);
+        window.removeEventListener('offline', handleOffline);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     fetchSchedule();
@@ -241,36 +309,51 @@ export default function SchedulePage() {
     return cells;
   }, [calYear, calMonth]);
 
+  /* Deduplicate events by date + type + title to prevent duplicate holidays/flags */
+  const uniqueEvents = useMemo(() => {
+    const seen = new Set<string>();
+    return events.filter((ev) => {
+      const dStr = ev.start_time ? ev.start_time.split('T')[0] : '';
+      const normTitle = ev.title.toLowerCase().replace(/\(.*?\)/g, '').replace(/[^a-z0-9]/g, '');
+      const key = ev.event_type === 'holiday'
+        ? `${dStr}_holiday_${normTitle.slice(0, 5)}`
+        : `${dStr}_${ev.event_type}_${normTitle}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }, [events]);
+
   /* group events by date map */
   const eventsByDate = useMemo(() => {
     const m: Record<string, ScheduleEvent[]> = {};
-    events.forEach((ev) => {
+    uniqueEvents.forEach((ev) => {
       const ymd = toYMD(new Date(ev.start_time));
       if (!m[ymd]) m[ymd] = [];
       m[ymd].push(ev);
     });
     return m;
-  }, [events]);
+  }, [uniqueEvents]);
 
   /* dots per day */
   const dotMap = useMemo(() => {
     const m: Record<string, string[]> = {};
-    events.forEach((ev) => {
+    uniqueEvents.forEach((ev) => {
       const ymd = toYMD(new Date(ev.start_time));
       if (!m[ymd]) m[ymd] = [];
       const col = TYPE_CONFIG[ev.event_type]?.color || '#2563EB';
       if (!m[ymd].includes(col)) m[ymd].push(col);
     });
     return m;
-  }, [events]);
+  }, [uniqueEvents]);
 
   /* filtered events */
   const filteredEvents = useMemo(() => {
-    return events.filter((ev) => {
+    return uniqueEvents.filter((ev) => {
       if (typeFilter && ev.event_type !== typeFilter) return false;
       return true;
     });
-  }, [events, typeFilter]);
+  }, [uniqueEvents, typeFilter]);
 
   /* selected day events */
   const selectedDayEvents = useMemo(() => {
@@ -299,7 +382,7 @@ export default function SchedulePage() {
     start_time: string;
     diffDays?: number;
   } | null>(() => {
-    const holidays = events
+    const holidays = uniqueEvents
       .filter((ev) => ev.event_type === 'holiday')
       .map((ev) => ({
         ...ev,
@@ -317,13 +400,13 @@ export default function SchedulePage() {
 
     const diffDays = Math.ceil((upcoming.dateObj.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
     return { title: upcoming.title, start_time: upcoming.start_time, diffDays };
-  }, [events, today, todayYMD]);
+  }, [uniqueEvents, today, todayYMD]);
 
   /* KPI 2: Working days in viewed month */
   const workingDaysInfo = useMemo(() => {
     const totalDays = daysInMonth(calYear, calMonth);
     let workDays = 0;
-    const holidaysInMonth = events.filter((ev) => {
+    const holidaysInMonth = uniqueEvents.filter((ev) => {
       if (ev.event_type !== 'holiday') return false;
       const d = new Date(ev.start_time);
       return d.getFullYear() === calYear && d.getMonth() === calMonth;
@@ -344,11 +427,11 @@ export default function SchedulePage() {
       holidayCount: holidaysInMonth.length,
       monthName: MONTH_NAMES[calMonth],
     };
-  }, [calYear, calMonth, events]);
+  }, [calYear, calMonth, uniqueEvents]);
 
   /* KPI 3: Scheduled items in viewed month */
   const monthStats = useMemo(() => {
-    const monthEvs = events.filter((ev) => {
+    const monthEvs = uniqueEvents.filter((ev) => {
       const d = new Date(ev.start_time);
       return d.getFullYear() === calYear && d.getMonth() === calMonth;
     });
@@ -363,56 +446,56 @@ export default function SchedulePage() {
       holidaysCount,
       deadlinesCount,
     };
-  }, [calYear, calMonth, events]);
+  }, [calYear, calMonth, uniqueEvents]);
 
-  /* Upcoming Company Highlights (next 4 upcoming events across calendar) */
+  /* Upcoming Company Highlights (next 4 upcoming events across calendar - strictly deduplicated) */
   const upcomingHighlights = useMemo(() => {
-    return events
+    return uniqueEvents
       .filter((ev) => toYMD(new Date(ev.start_time)) >= todayYMD)
       .sort((a, b) => a.start_time.localeCompare(b.start_time))
       .slice(0, 4);
-  }, [events, todayYMD]);
+  }, [uniqueEvents, todayYMD]);
 
   /* Event category counts for filter pills */
   const categoryCounts = useMemo(() => {
     const counts: Record<string, number> = {
-      all: events.length,
+      all: uniqueEvents.length,
       holiday: 0,
       meeting: 0,
       company_event: 0,
       deadline: 0,
       reminder: 0,
     };
-    events.forEach((e) => {
+    uniqueEvents.forEach((e) => {
       if (counts[e.event_type] !== undefined) {
         counts[e.event_type]++;
       }
     });
     return counts;
-  }, [events]);
+  }, [uniqueEvents]);
 
   return (
     <AppShell>
       <div className="flex flex-col h-full gap-4 max-w-7xl mx-auto w-full pb-8" style={{ color: 'var(--ink)' }}>
         
         {/* TOP HERO HEADER */}
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pb-3 border-b border-[var(--line)]">
-          <div>
-            <div className="flex items-center gap-2.5">
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-500/10 border border-blue-500/20 text-blue-600 dark:text-blue-400 shadow-xs">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pb-3 border-b border-[var(--line)] min-w-0">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-blue-500/10 border border-blue-500/20 text-blue-600 dark:text-blue-400 shadow-xs">
                 <CalendarIcon className="h-5 w-5" />
               </div>
-              <div>
+              <div className="min-w-0 flex-1">
                 <h1
-                  className="text-lg sm:text-xl font-bold tracking-tight flex items-center gap-2"
+                  className="text-lg sm:text-xl font-bold tracking-tight flex flex-wrap items-center gap-2"
                   style={{ fontFamily: 'Bricolage Grotesque, sans-serif', color: 'var(--ink)' }}
                 >
-                  Calendar & Operational Agenda
-                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20 hidden md:inline-flex items-center gap-1">
+                  <span className="truncate">Calendar & Operational Agenda</span>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20 hidden md:inline-flex items-center gap-1 shrink-0">
                     <ShieldCheck className="h-3 w-3" /> Live Operations
                   </span>
                 </h1>
-                <p className="text-xs text-[var(--muted)]">
+                <p className="text-xs text-[var(--muted)] truncate sm:text-clip">
                   Google Workspace sync, Indian gazetted holidays, and instant video conference launches.
                 </p>
               </div>
@@ -420,11 +503,11 @@ export default function SchedulePage() {
           </div>
 
           {/* Top Actions */}
-          <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+          <div className="flex items-center gap-2 w-full sm:w-auto justify-end shrink-0 flex-wrap">
             <button
               onClick={handleSync}
               disabled={syncing}
-              className="px-3.5 py-2 rounded-xl text-xs font-semibold border flex items-center gap-2 transition-all hover:bg-[var(--surface-hover)] active:scale-95 shadow-xs"
+              className="flex-1 sm:flex-none justify-center px-3.5 py-2 rounded-xl text-xs font-semibold border flex items-center gap-2 transition-all hover:bg-[var(--surface-hover)] active:scale-95 shadow-xs"
               style={{ background: 'var(--surface)', borderColor: 'var(--line)', color: 'var(--ink)' }}
               title="Sync with Google Workspace calendar"
             >
@@ -434,13 +517,37 @@ export default function SchedulePage() {
 
             <button
               onClick={() => openCreateModal(selected)}
-              className="glow-btn-primary px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 shadow-sm transition-all hover:scale-[1.02] active:scale-95 text-white"
+              className="glow-btn-primary flex-1 sm:flex-none justify-center px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 shadow-sm transition-all hover:scale-[1.02] active:scale-95 text-white"
             >
               <Plus className="h-4 w-4" />
               <span>Schedule Event</span>
             </button>
           </div>
         </div>
+
+        {/* OFFLINE RESILIENCE BANNER */}
+        {isOffline && (
+          <div className="flex items-center justify-between gap-3 p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-700 dark:text-amber-400 text-xs animate-in fade-in slide-in-from-top-1">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className="w-8 h-8 rounded-xl bg-amber-500/20 flex items-center justify-center shrink-0 text-amber-600 dark:text-amber-400">
+                <WifiOff className="h-4 w-4" />
+              </div>
+              <div className="min-w-0">
+                <p className="font-bold tracking-tight">Offline Mode Active</p>
+                <p className="text-[11px] text-[var(--muted)] truncate">
+                  Loaded your last known schedule shell from offline cache.{lastSyncTimestamp ? ` Last synced: ${new Date(lastSyncTimestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', month: 'short', day: 'numeric' })}` : ''}
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => fetchSchedule()}
+              className="px-3 py-1.5 rounded-xl border border-amber-500/40 hover:bg-amber-500/20 text-amber-800 dark:text-amber-300 font-semibold text-[11px] shrink-0 transition-all active:scale-95 flex items-center gap-1.5"
+            >
+              <RefreshCw className="h-3 w-3" />
+              <span>Retry</span>
+            </button>
+          </div>
+        )}
 
         {/* ALERTS & NOTIFICATIONS */}
         {notification && (
@@ -960,13 +1067,13 @@ export default function SchedulePage() {
                 </div>
 
                 {/* Calendar Grid Cells */}
-                <div className="grid grid-cols-7 gap-2">
+                <div className="grid grid-cols-7 gap-1.5 sm:gap-2">
                   {calGrid.map((dayNum, idx) => {
                     if (dayNum === null) {
                       return (
                         <div
                           key={`empty-${idx}`}
-                          className="min-h-[96px] rounded-2xl border border-[var(--line)]/20 bg-[var(--paper)]/30 opacity-25"
+                          className="aspect-square sm:aspect-auto sm:min-h-[88px] rounded-xl sm:rounded-2xl border border-[var(--line)]/20 bg-[var(--paper)]/30 opacity-25"
                         />
                       );
                     }
@@ -984,7 +1091,7 @@ export default function SchedulePage() {
                       <div
                         key={`day-${dayNum}`}
                         onClick={() => setSelected(cellYMD)}
-                        className={`group min-h-[96px] rounded-2xl p-2 flex flex-col justify-between transition-all border text-left cursor-pointer relative ${
+                        className={`group aspect-square sm:aspect-auto sm:min-h-[88px] rounded-xl sm:rounded-2xl p-1.5 sm:p-2 flex flex-col justify-between transition-all border text-left cursor-pointer relative ${
                           isSelected
                             ? 'border-blue-500 bg-blue-500/10 shadow-sm ring-2 ring-blue-500/40'
                             : isTodayCell
@@ -992,16 +1099,16 @@ export default function SchedulePage() {
                             : hasHoliday
                             ? 'border-amber-500/30 bg-amber-500/[0.04] hover:border-amber-400/60'
                             : isWeekendCol
-                            ? 'border-[var(--line)] bg-[var(--paper)]/50 hover:border-blue-500/40'
+                            ? 'border-[var(--line)] bg-[var(--paper)]/50 hover:border-blue-500/40 opacity-70 sm:opacity-100'
                             : 'border-[var(--line)] bg-[var(--paper)] hover:border-blue-500/40 hover:bg-[var(--surface-hover)]'
                         }`}
                       >
                         {/* Cell Header: Day Number + Quick Add */}
                         <div className="w-full flex items-center justify-between">
                           <span
-                            className={`flex items-center justify-center text-xs rounded-full transition-all ${
+                            className={`flex items-center justify-center text-[11px] sm:text-xs rounded-full transition-all ${
                               isTodayCell
-                                ? 'h-6 w-6 bg-blue-600 text-white font-black shadow-sm ring-2 ring-blue-400/30'
+                                ? 'h-5 w-5 sm:h-6 sm:w-6 bg-blue-600 text-white font-black shadow-sm ring-2 ring-blue-400/30'
                                 : isSelected
                                 ? 'font-black text-blue-600 dark:text-blue-400'
                                 : hasHoliday
@@ -1014,22 +1121,41 @@ export default function SchedulePage() {
                             {dayNum}
                           </span>
 
-                          {/* Quick "+" scheduler on cell hover */}
+                          {/* Quick "+" scheduler on cell hover (desktop) */}
                           <button
                             type="button"
                             onClick={(e) => {
                               e.stopPropagation();
                               openCreateModal(cellYMD);
                             }}
-                            className="opacity-0 group-hover:opacity-100 p-0.5 rounded-md hover:bg-blue-500/20 text-blue-600 dark:text-blue-400 transition-opacity"
+                            className="hidden sm:block opacity-0 group-hover:opacity-100 p-0.5 rounded-md hover:bg-blue-500/20 text-blue-600 dark:text-blue-400 transition-opacity"
                             title={`Schedule on ${cellYMD}`}
                           >
                             <Plus className="h-3.5 w-3.5" />
                           </button>
                         </div>
 
-                        {/* Event Chips inside the Cell */}
-                        <div className="w-full space-y-1 my-1">
+                        {/* Mobile view (< sm): Centered Holiday / Event Badges */}
+                        <div className="sm:hidden flex items-center justify-center w-full my-auto">
+                          {hasHoliday ? (
+                            <div className="flex items-center justify-center p-0.5 rounded-md bg-amber-500/10">
+                              <span className="text-[10px]">🇮🇳</span>
+                            </div>
+                          ) : dayEvents.length > 0 ? (
+                            <div className="flex items-center gap-0.5">
+                              {dayEvents.slice(0, 3).map((ev) => (
+                                <span
+                                  key={ev.id}
+                                  className="w-1.5 h-1.5 rounded-full"
+                                  style={{ background: TYPE_CONFIG[ev.event_type]?.color || '#2563EB' }}
+                                />
+                              ))}
+                            </div>
+                          ) : null}
+                        </div>
+
+                        {/* Desktop Event Chips inside the Cell (>= sm) */}
+                        <div className="hidden sm:block w-full space-y-1 my-1">
                           {dayEvents.slice(0, 2).map((ev) => {
                             const conf = TYPE_CONFIG[ev.event_type] || TYPE_CONFIG.event;
                             const isHol = ev.event_type === 'holiday';
@@ -1064,9 +1190,9 @@ export default function SchedulePage() {
 
                         {/* Cell Bottom Indicator dots if no chips */}
                         {dayEvents.length === 0 && (
-                          <div className="h-1.5 w-full flex items-center justify-end">
+                          <div className="h-1 sm:h-1.5 w-full flex items-center justify-end">
                             {isWeekendCol && (
-                              <span className="text-[8px] font-semibold text-[var(--muted)]/50 uppercase tracking-wider">
+                              <span className="text-[7px] sm:text-[8px] font-semibold text-[var(--muted)]/50 uppercase tracking-wider hidden sm:inline-block">
                                 Wkd
                               </span>
                             )}

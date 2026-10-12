@@ -200,19 +200,19 @@ export default function EmployeesPage() {
     <AppShell>
       <div className="space-y-6 max-w-7xl mx-auto">
         {/* Header */}
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50 text-blue-600 border border-blue-200">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 min-w-0">
+          <div className="flex items-center gap-3 min-w-0 flex-1">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600 border border-blue-200">
               <Users className="h-5 w-5" />
             </div>
-            <div>
-              <h1 className="text-xl font-bold tracking-tight flex items-center gap-2" style={{ color: 'var(--ink)' }}>
-                {isSquadOnly ? `${groupName || 'My Squad'} Directory` : 'Employee Directory'}
-                <span className="rounded-full px-2 py-0.5 text-xs font-medium" style={{ background: 'var(--surface-2)', border: '1px solid var(--line)', color: 'var(--ink)' }}>
+            <div className="min-w-0 flex-1">
+              <h1 className="text-lg sm:text-xl font-bold tracking-tight flex flex-wrap items-center gap-2" style={{ color: 'var(--ink)' }}>
+                <span className="truncate">{isSquadOnly ? `${groupName || 'My Squad'} Directory` : 'Employee Directory'}</span>
+                <span className="shrink-0 rounded-full px-2 py-0.5 text-xs font-medium" style={{ background: 'var(--surface-2)', border: '1px solid var(--line)', color: 'var(--ink)' }}>
                   {employees.length} {employees.length === 1 ? 'Member' : 'Members'}
                 </span>
               </h1>
-              <p className="text-xs" style={{ color: 'var(--muted)' }}>
+              <p className="text-xs truncate sm:text-clip" style={{ color: 'var(--muted)' }}>
                 {isSquadOnly
                   ? 'Personnel assigned to your working squad & department'
                   : 'Cruvels workforce organization, roles & department assignments'}
@@ -223,7 +223,7 @@ export default function EmployeesPage() {
           {!isSquadOnly && (
             <button
               onClick={() => setShowAddModal(true)}
-              className="glow-btn-primary flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-bold text-white tracking-wide shadow-sm"
+              className="glow-btn-primary flex items-center justify-center gap-2 rounded-xl px-4 py-2 text-xs font-bold text-white tracking-wide shadow-sm w-full sm:w-auto shrink-0"
             >
               <UserPlus className="h-4 w-4" />
               <span>Add New Employee</span>
@@ -240,8 +240,8 @@ export default function EmployeesPage() {
         )}
 
         {/* Filter Controls */}
-        <div className="flex flex-col sm:flex-row items-center gap-3 rounded-2xl p-3 border shadow-sm" style={{ background: 'var(--surface)', borderColor: 'var(--line)' }}>
-          <div className="relative flex-1 w-full">
+        <div className="relative flex flex-col md:flex-row items-stretch md:items-center gap-3 rounded-2xl p-3 border shadow-sm w-full" style={{ background: 'var(--surface)', borderColor: 'var(--line)' }}>
+          <div className="relative flex-1 w-full min-w-0">
             <Search className="pointer-events-none absolute left-3 top-2.5 h-3.5 w-3.5" style={{ color: 'var(--muted)' }} />
             <input
               type="text"
@@ -253,12 +253,12 @@ export default function EmployeesPage() {
             />
           </div>
 
-          <div className="flex items-center gap-2 w-full sm:w-auto">
+          <div className="flex flex-wrap sm:flex-nowrap items-center gap-2 w-full md:w-auto min-w-0">
             {!isSquadOnly && (
               <select
                 value={deptFilter}
                 onChange={(e) => setDeptFilter(e.target.value)}
-                className="rounded-xl border py-1.5 px-3 text-xs focus:outline-none transition-colors cursor-pointer"
+                className="flex-1 sm:flex-none min-w-[130px] rounded-xl border py-1.5 px-3 text-xs focus:outline-none transition-colors cursor-pointer truncate"
                 style={{ background: 'var(--surface-2)', borderColor: 'var(--line)', color: 'var(--ink)' }}
               >
                 <option value="">All Departments</option>
@@ -273,7 +273,7 @@ export default function EmployeesPage() {
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
-              className="rounded-xl border py-1.5 px-3 text-xs focus:outline-none transition-colors cursor-pointer"
+              className="flex-1 sm:flex-none min-w-[110px] rounded-xl border py-1.5 px-3 text-xs focus:outline-none transition-colors cursor-pointer"
               style={{ background: 'var(--surface-2)', borderColor: 'var(--line)', color: 'var(--ink)' }}
             >
               <option value="">All Statuses</option>
@@ -325,12 +325,26 @@ export default function EmployeesPage() {
                     <span className="font-medium" style={{ color: 'var(--ink)' }}>{emp.department_name}</span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <Mail className="h-3.5 w-3.5" style={{ color: 'var(--muted)' }} />
-                    <span className="font-mono text-[11px] truncate">{emp.email}</span>
+                    <Mail className="h-3.5 w-3.5 shrink-0" style={{ color: 'var(--muted)' }} />
+                    <a
+                      href={`mailto:${emp.email}`}
+                      onClick={(e) => e.stopPropagation()}
+                      className="font-mono text-[11px] truncate hover:underline hover:text-blue-500 transition-colors"
+                      title={`Send email to ${emp.email}`}
+                    >
+                      {emp.email}
+                    </a>
                   </div>
                   <div className="flex items-center gap-2">
-                    <Phone className="h-3.5 w-3.5" style={{ color: 'var(--muted)' }} />
-                    <span>{emp.phone}</span>
+                    <Phone className="h-3.5 w-3.5 shrink-0" style={{ color: 'var(--muted)' }} />
+                    <a
+                      href={`tel:${emp.phone?.replace(/[\s-]/g, '')}`}
+                      onClick={(e) => e.stopPropagation()}
+                      className="hover:underline hover:text-blue-500 transition-colors"
+                      title={`Call ${emp.phone}`}
+                    >
+                      {emp.phone}
+                    </a>
                   </div>
                 </div>
 
@@ -495,18 +509,18 @@ export default function EmployeesPage() {
                       border: '1px solid var(--line)',
                     }}
                   >
-                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-5">
-                      <div className="flex items-center gap-4">
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-5 min-w-0">
+                      <div className="flex items-center gap-4 min-w-0 flex-1">
                         <div
                           className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl text-2xl font-extrabold text-white shadow-md"
                           style={{ background: 'var(--teal)' }}
                         >
                           {selectedDetail.employee.first_name.charAt(0).toUpperCase()}
                         </div>
-                        <div className="space-y-1">
-                          <div className="flex items-center gap-2 flex-wrap">
+                        <div className="space-y-1 min-w-0 flex-1">
+                          <div className="flex items-center gap-2 flex-wrap min-w-0">
                             <h1
-                              className="text-xl sm:text-2xl font-bold tracking-tight"
+                              className="text-xl sm:text-2xl font-bold tracking-tight truncate"
                               style={{ color: 'var(--ink)', fontFamily: 'Bricolage Grotesque, sans-serif' }}
                             >
                               {selectedDetail.employee.name}
@@ -546,7 +560,12 @@ export default function EmployeesPage() {
                             <span>•</span>
                             <span className="flex items-center gap-1.5">
                               <Phone className="h-3.5 w-3.5" style={{ color: 'var(--muted)' }} />
-                              {selectedDetail.employee.phone}
+                              <a
+                                href={`tel:${selectedDetail.employee.phone?.replace(/[\s-]/g, '')}`}
+                                className="hover:underline hover:text-blue-500 transition-colors"
+                              >
+                                {selectedDetail.employee.phone}
+                              </a>
                             </span>
                           </div>
                         </div>

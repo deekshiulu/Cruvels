@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { Message } from '@/lib/db/types';
 import { clientCache } from '@/lib/cache/clientCache';
+import { showSuccess, showError } from '@/lib/utils/toast';
 
 function SpamContent() {
   const router = useRouter();
@@ -69,11 +70,12 @@ function SpamContent() {
         setMessages((prev) => prev.filter((m) => m.id !== msgId));
         setTotal((prev) => Math.max(0, prev - 1));
         clientCache.invalidate('inbox');
+        showSuccess('Email restored to your Inbox.');
         setNotification('Email restored to your Inbox.');
         setTimeout(() => setNotification(null), 4000);
       }
     } catch {
-      alert('Failed to restore message.');
+      showError('Failed to restore message.');
     }
   };
 
@@ -85,11 +87,12 @@ function SpamContent() {
       if (res.ok) {
         setMessages((prev) => prev.filter((m) => m.id !== msgId));
         setTotal((prev) => Math.max(0, prev - 1));
+        showSuccess('Message permanently purged.');
         setNotification('Message permanently purged.');
         setTimeout(() => setNotification(null), 4000);
       }
     } catch {
-      alert('Failed to delete message.');
+      showError('Failed to delete message.');
     }
   };
 

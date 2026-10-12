@@ -44,11 +44,110 @@ if (typeof window !== 'undefined') {
   unlockEvents.forEach((evt) => window.addEventListener(evt, handleFirstInteraction, { passive: true }));
 }
 
+export interface CustomSoundPreference {
+  name: string;
+  dataUrl: string;
+  updatedAt: number;
+}
+
+const CUSTOM_SOUND_KEY = 'cruvels_custom_notification_sound';
+
 /**
- * Plays a modern, pleasant dual-tone workplace alert chime.
+ * Retrieves the user's custom notification audio preference if configured.
+ */
+export function getCustomSound(): CustomSoundPreference | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = localStorage.getItem(CUSTOM_SOUND_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw) as CustomSoundPreference;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Saves a user's uploaded custom audio chime.
+ */
+export function setCustomSound(name: string, dataUrl: string): void {
+  if (typeof window === 'undefined') return;
+  try {
+    const pref: CustomSoundPreference = {
+      name,
+      dataUrl,
+      updatedAt: Date.now(),
+    };
+    localStorage.setItem(CUSTOM_SOUND_KEY, JSON.stringify(pref));
+  } catch (err) {
+    console.warn('[CUSTOM SOUND SAVE FAILED]', err);
+  }
+}
+
+/**
+ * Removes the custom sound preference, restoring standard synthesized chime.
+ */
+export function removeCustomSound(): void {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.removeItem(CUSTOM_SOUND_KEY);
+  } catch {}
+}
+
+/**
+ * Plays a specific audio data URL directly (useful for previewing).
+ */
+export async function playCustomAudioUrl(dataUrl: string): Promise<boolean> {
+  if (typeof window === 'undefined' || !dataUrl) return false;
+  try {
+    const audio = new Audio(dataUrl);
+    audio.volume = 0.85;
+    await audio.play();
+    return true;
+  } catch (err) {
+    console.warn('[CUSTOM AUDIO PLAYBACK FAILED]', err);
+    return false;
+  }
+}
+
+/**
+ * Plays either the user's custom audio file or a modern dual-tone synthesized alert chime.
  * Tone 1: 587.33 Hz (D5) -> Tone 2: 880 Hz (A5) with smooth exponential decay.
  */
 export function playNotificationSound(): void {
+  if (typeof window === 'undefined') return;
+
+  // 1. Try playing custom audio if set
+  const custom = getCustomSound();
+  if (custom && custom.dataUrl) {
+    try {
+      const audio = new Audio(custom.dataUrl);
+      audio.volume = 0.85;
+      const playPromise = audio.play();
+      if (playPromise !== undefined) {
+        playPromise.catch((err) => {
+          console.warn('[CUSTOM AUDIO PLAY BLOCKED/FAILED, FALLING BACK TO SYNTH]', err);
+          playSynthesizedChime();
+        });
+      }
+    } catch {
+      playSynthesizedChime();
+    }
+  } else {
+    playSynthesizedChime();
+  }
+
+  // Device vibration pattern for mobile / installed app
+  if ('navigator' in window && navigator.vibrate) {
+    try {
+      navigator.vibrate([150, 80, 150]);
+    } catch {}
+  }
+}
+
+/**
+ * Internal Web Audio API synthesized workplace alert chime.
+ */
+export function playSynthesizedChime(): void {
   if (typeof window === 'undefined') return;
 
   try {
@@ -96,12 +195,5 @@ export function playNotificationSound(): void {
     }
   } catch (err) {
     console.warn('[AUDIO CHIME ERROR]', err);
-  }
-
-  // Device vibration pattern for mobile / installed app
-  if (typeof window !== 'undefined' && 'navigator' in window && navigator.vibrate) {
-    try {
-      navigator.vibrate([150, 80, 150]);
-    } catch {}
   }
 }

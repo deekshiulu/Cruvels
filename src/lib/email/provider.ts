@@ -61,6 +61,7 @@ export interface SendEmailResult {
 
 export interface EmailProvider {
   name: string;
+  isConfigured?(): boolean;
   fetchRecentMessages(sinceHistoryId?: string, limit?: number): Promise<{
     messages: ProviderMessageItem[];
     newHistoryId?: string;
@@ -102,6 +103,10 @@ export class MockEmailProvider implements EmailProvider {
 
   constructor() {
     this.seedMockMailbox();
+  }
+
+  public isConfigured(): boolean {
+    return true;
   }
 
   public seedMockMailbox() {
@@ -209,6 +214,11 @@ export class SmtpImapProvider implements EmailProvider {
 
   constructor() {
     this.loadMailboxConfigurations();
+  }
+
+  public isConfigured(): boolean {
+    this.loadMailboxConfigurations();
+    return this.mailboxes.length > 0;
   }
 
   private loadMailboxConfigurations() {
@@ -778,6 +788,10 @@ export class GoogleWorkspaceProvider implements EmailProvider {
 
   constructor() {
     this.initGmailClient();
+  }
+
+  public isConfigured(): boolean {
+    return this.gmail !== null;
   }
 
   private initGmailClient() {

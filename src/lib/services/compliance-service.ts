@@ -380,6 +380,8 @@ export class ComplianceService {
             ? `[URGENT] Attendance Deadline Notice - ${today}`
             : `Daily Attendance Reminder - ${today}`;
 
+          const appBaseUrl = (process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3005').replace(/\/+$/, '');
+
           await dataStore.createMessage({
             owner_user_id: userId,
             owner_alias_id: empAlias,
@@ -389,7 +391,7 @@ export class ComplianceService {
             from_name: 'Cruvels Workplace Compliance',
             to_addresses: [empAlias],
             subject,
-            body_text: `Good morning ${item.employeeName},\n\nYour attendance for today (${today}) has not been recorded yet.\n\nMarking Deadline: ${rules.markingDeadline} IST\nStatus: Unrecorded\n\nPlease log into the portal and punch your attendance at http://localhost:3005/attendance.\n\nCruvels HR & Compliance Team`,
+            body_text: `Good morning ${item.employeeName},\n\nYour attendance for today (${today}) has not been recorded yet.\n\nMarking Deadline: ${rules.markingDeadline} IST\nStatus: Unrecorded\n\nPlease log into the portal and punch your attendance at ${appBaseUrl}/attendance.\n\nCruvels HR & Compliance Team`,
             body_html: `<div class="email-card" style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: #0A192F; line-height: 1.6; max-width: 600px; padding: 8px 0;">
               <div class="email-card-header" style="background: ${isUrgent ? '#991B1B' : '#0A192F'}; color: #FFFFFF; padding: 18px 24px; border-radius: 12px 12px 0 0;">
                 <h2 style="margin: 0; font-size: 18px; font-weight: 700; color: #FFFFFF !important;">${isUrgent ? 'Attendance Deadline Exceeded' : 'Daily Attendance Reminder'}</h2>
@@ -417,7 +419,7 @@ export class ComplianceService {
                   </tr>
                 </table>
                 <div style="margin-top: 24px;">
-                  <a href="/attendance" class="email-action-btn" style="display: inline-flex; align-items: center; justify-content: center; gap: 8px; background: #0A369D; color: #FFFFFF !important; text-decoration: none !important; padding: 11px 22px; border-radius: 9px; font-size: 13px; font-weight: 700; letter-spacing: 0.01em; box-shadow: 0 2px 8px rgba(10, 54, 157, 0.25);">
+                  <a href="${appBaseUrl}/attendance" class="email-action-btn" style="display: inline-flex; align-items: center; justify-content: center; gap: 8px; background: #0A369D; color: #FFFFFF !important; text-decoration: none !important; padding: 11px 22px; border-radius: 9px; font-size: 13px; font-weight: 700; letter-spacing: 0.01em; box-shadow: 0 2px 8px rgba(10, 54, 157, 0.25);">
                     Punch Attendance Now &rarr;
                   </a>
                 </div>
@@ -437,13 +439,14 @@ export class ComplianceService {
             try {
               const { getEmailProvider } = await import('../email/provider');
               const provider = getEmailProvider();
-              if (provider && provider.name !== 'MockEmailProvider') {
+              const isConfigured = typeof provider?.isConfigured === 'function' ? provider.isConfigured() : true;
+              if (provider && provider.name !== 'MockEmailProvider' && isConfigured) {
                 await provider.sendEmail({
                   from: 'compliance@cruvels.com',
                   fromName: 'Cruvels Workplace Compliance',
                   to: [empAlias],
                   subject,
-                  text: `Good morning ${item.employeeName},\n\nYour attendance for today (${today}) has not been recorded yet.\n\nMarking Deadline: ${rules.markingDeadline} IST\nStatus: Unrecorded\n\nPlease log into the portal and punch your attendance at http://localhost:3005/attendance.\n\nCruvels HR & Compliance Team`,
+                  text: `Good morning ${item.employeeName},\n\nYour attendance for today (${today}) has not been recorded yet.\n\nMarking Deadline: ${rules.markingDeadline} IST\nStatus: Unrecorded\n\nPlease log into the portal and punch your attendance at ${appBaseUrl}/attendance.\n\nCruvels HR & Compliance Team`,
                   html: formatted.body,
                 });
               }

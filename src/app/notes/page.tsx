@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { Note } from '@/lib/db/types';
 import { clientCache } from '@/lib/cache/clientCache';
+import { showError, showSuccess } from '@/lib/utils/toast';
 
 export default function NotesPage() {
   const [notes, setNotes] = useState<Note[]>(() => {
@@ -91,10 +92,11 @@ export default function NotesPage() {
     try {
       const res = await fetch(`/api/notes/${id}`, { method: 'DELETE' });
       if (res.ok) {
+        showSuccess('Note deleted.');
         fetchNotes();
       }
     } catch {
-      alert('Failed to delete note.');
+      showError('Failed to delete note.');
     }
   };
 

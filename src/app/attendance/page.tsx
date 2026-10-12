@@ -1072,7 +1072,7 @@ export default function AttendancePage() {
                     return (
                       <div
                         key={`empty-${idx}`}
-                        className="min-h-[85px] sm:min-h-[105px] rounded-xl p-2 opacity-20"
+                        className="aspect-square sm:aspect-auto sm:min-h-[96px] rounded-xl sm:rounded-2xl p-2 opacity-20"
                         style={{ background: 'var(--paper)', border: '1px solid var(--line-soft)' }}
                       />
                     );
@@ -1123,7 +1123,7 @@ export default function AttendancePage() {
                           isFuture: cell.isFuture,
                         })
                       }
-                      className="min-h-[85px] sm:min-h-[105px] rounded-xl p-2.5 sm:p-3 flex flex-col justify-between cursor-pointer transition-all duration-150"
+                      className="aspect-square sm:aspect-auto sm:min-h-[96px] rounded-xl sm:rounded-2xl p-2 sm:p-3 flex flex-col justify-between cursor-pointer transition-all duration-150"
                       style={cellStyle}
                     >
                       {/* Top Day Number & Today indicator */}

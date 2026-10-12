@@ -38,22 +38,30 @@ import {
   Settings,
   ArrowUpRight,
   HardDrive,
+  Info,
+  AlertCircle,
+  Music,
+  Upload,
+  Play,
+  WifiOff,
 } from 'lucide-react';
 import { AuthSessionUser, AppNotification } from '@/lib/db/types';
-import { playNotificationSound, unlockAudioContext } from '@/lib/utils/sound';
+import {
+  playNotificationSound,
+  unlockAudioContext,
+  getCustomSound,
+  setCustomSound,
+  removeCustomSound,
+  playCustomAudioUrl,
+  type CustomSoundPreference,
+} from '@/lib/utils/sound';
 import { clientCache } from '@/lib/cache/clientCache';
 import { validateTabSession, clearTabSession, TAB_CHANNEL_NAME, TAB_SESSION_KEY } from '@/lib/auth/client-session';
-
-function urlBase64ToUint8Array(base64String: string) {
-  const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
-  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
-  const rawData = window.atob(base64);
-  const outputArray = new Uint8Array(rawData.length);
-  for (let i = 0; i < rawData.length; ++i) {
-    outputArray[i] = rawData.charCodeAt(i);
-  }
-  return outputArray;
-}
+import {
+  syncPushSubscription,
+  requestNotificationPermission,
+  urlBase64ToUint8Array,
+} from '@/lib/notifications/client-push';
 
 
 // Module-level cache to eliminate re-renders and full-screen loading on navigation
@@ -113,6 +121,94 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const [notifDropdownOpen, setNotifDropdownOpen] = useState(false);
   const [notifCategoryFilter, setNotifCategoryFilter] = useState<string>('all');
   const [devicePermission, setDevicePermission] = useState<'default' | 'granted' | 'denied'>('default');
+  const [toastMessage, setToastMessage] = useState<{
+    type: 'info' | 'success' | 'error';
+    message: string;
+  } | null>(null);
+
+  // Custom Notification Sound Engine
+  const [customSound, setCustomSoundState] = useState<CustomSoundPreference | null>(() => {
+    if (typeof window !== 'undefined') {
+      return getCustomSound();
+    }
+    return null;
+  });
+  const [showSoundSettings, setShowSoundSettings] = useState(false);
+  const [soundUploadError, setSoundUploadError] = useState<string | null>(null);
+  const soundFileInputRef = useRef<HTMLInputElement>(null);
+  const [isOffline, setIsOffline] = useState(() => (typeof window !== 'undefined' ? !navigator.onLine : false));
+
+  useEffect(() => {
+    const handleOnline = () => setIsOffline(false);
+    const handleOffline = () => setIsOffline(true);
+    if (typeof window !== 'undefined') {
+      setIsOffline(!navigator.onLine);
+      window.addEventListener('online', handleOnline);
+      window.addEventListener('offline', handleOffline);
+    }
+    return () => {
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('online', handleOnline);
+        window.removeEventListener('offline', handleOffline);
+      }
+    };
+  }, []);
+
+  const handleSoundFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 2 * 1024 * 1024) {
+      setSoundUploadError('Audio file is too large (max 2MB). Please select a shorter chime.');
+      return;
+    }
+
+    setSoundUploadError(null);
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = reader.result as string;
+      setCustomSound(file.name, dataUrl);
+      setCustomSoundState({
+        name: file.name,
+        dataUrl,
+        updatedAt: Date.now(),
+      });
+      unlockAudioContext();
+      playCustomAudioUrl(dataUrl);
+      showToast('success', `Custom notification sound "${file.name}" saved!`);
+    };
+    reader.onerror = () => {
+      setSoundUploadError('Failed to read audio file.');
+    };
+    reader.readAsDataURL(file);
+    e.target.value = '';
+  };
+
+  const handleResetSound = () => {
+    removeCustomSound();
+    setCustomSoundState(null);
+    unlockAudioContext();
+    playNotificationSound();
+    showToast('info', 'Reset to system notification chime.');
+  };
+
+  const showToast = (type: 'info' | 'success' | 'error', message: string) => {
+    setToastMessage({ type, message });
+    setTimeout(() => {
+      setToastMessage((cur) => (cur?.message === message ? null : cur));
+    }, 4500);
+  };
+
+  useEffect(() => {
+    const handleAppToast = (e: Event) => {
+      const custom = e as CustomEvent<{ type?: 'info' | 'success' | 'error'; message: string }>;
+      if (custom.detail?.message) {
+        showToast(custom.detail.type || 'info', custom.detail.message);
+      }
+    };
+    window.addEventListener('app:toast', handleAppToast);
+    return () => window.removeEventListener('app:toast', handleAppToast);
+  }, []);
   const notifDropdownRef = useRef<HTMLDivElement>(null);
   const knownNotifIdsRef = useRef<Set<string>>(new Set());
   const isInitialLoadRef = useRef(true);
@@ -394,6 +490,17 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
     window.addEventListener('mail-read', handleMailRead);
 
+    // Auto-register service worker and check/sync device notification permission
+    if (typeof window !== 'undefined' && 'Notification' in window) {
+      const currentPerm = Notification.permission;
+      setDevicePermission(currentPerm);
+      if (currentPerm === 'granted') {
+        syncPushSubscription().catch(() => {});
+      }
+    } else if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw.js').catch(() => {});
+    }
+
     return () => {
       mounted = false;
       tabChannel?.close();
@@ -405,62 +512,35 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   // Request native browser/device notification permission
   const requestDeviceNotifications = async () => {
-    if (typeof window === 'undefined' || !('Notification' in window)) {
-      alert('Browser notifications are not supported on this device/browser.');
+    // Check if running inside mobile WebView (Android WebView, Flutter inappwebview, or missing Notification API)
+    const isWebView =
+      typeof window !== 'undefined' &&
+      Boolean(
+        (window as any).ReactNativeWebView ||
+        (window as any).flutter_inappwebview ||
+        !('Notification' in window) ||
+        /wv|Android.*Version\/[0-9.]+/i.test(navigator.userAgent)
+      );
+
+    if (isWebView) {
+      showToast('info', 'Mobile device notifications are handled automatically by the Cruvels Mobile App.');
       return;
     }
 
-    try {
-      const perm = await Notification.requestPermission();
-      setDevicePermission(perm);
-      unlockAudioContext();
-      if (perm === 'granted') {
-        playNotificationSound();
+    if (!('Notification' in window)) {
+      showToast('error', 'Push notifications are not supported on this browser.');
+      return;
+    }
 
-        // Register Service Worker if supported
-        if ('serviceWorker' in navigator) {
-          try {
-            const reg = await navigator.serviceWorker.register('/sw.js');
-            const vapidRes = await fetch('/api/notifications/vapid');
-            const vapidData = vapidRes.ok ? await vapidRes.json() : null;
-            if (vapidData?.publicKey && reg.pushManager) {
-              const existing = await reg.pushManager.getSubscription();
-              const subscription =
-                existing ||
-                (await reg.pushManager.subscribe({
-                  userVisibleOnly: true,
-                  applicationServerKey: urlBase64ToUint8Array(vapidData.publicKey),
-                }));
-              const rawKey = subscription.getKey('p256dh');
-              const rawAuth = subscription.getKey('auth');
-              if (rawKey && rawAuth) {
-                await fetch('/api/notifications/subscribe', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({
-                    endpoint: subscription.endpoint,
-                    keys: {
-                      p256dh: btoa(String.fromCharCode(...new Uint8Array(rawKey))),
-                      auth: btoa(String.fromCharCode(...new Uint8Array(rawAuth))),
-                    },
-                    deviceName: navigator.userAgent.slice(0, 60),
-                  }),
-                });
-              }
-            }
-          } catch {
-            // SW / push optional
-          }
-        }
-
-        // Send confirmation device notification
-        new Notification('Cruvels Internal Portal', {
-          body: 'Device linked. You will receive alerts even when this tab is in the background.',
-          icon: '/favicon.ico',
-        });
-      }
-    } catch (err) {
-      console.error('Device notification request failed', err);
+    const perm = await requestNotificationPermission();
+    if (perm === 'granted') {
+      setDevicePermission('granted');
+      showToast('success', 'Device linked successfully for notifications!');
+    } else if (perm === 'denied') {
+      setDevicePermission('denied');
+      showToast('error', 'Notification permission was denied in your browser settings.');
+    } else {
+      showToast('info', 'Mobile device notifications are handled automatically by the Cruvels Mobile App.');
     }
   };
 
@@ -643,8 +723,13 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         <div className="space-y-6 overflow-y-auto pr-1">
           {/* Brand Header */}
           <div className="flex items-center justify-between px-1.5 pt-1">
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl p-1 shadow-xs bg-[#0A192F] border border-[#1E3A5F]/60">
+            <Link
+              href={user.mustChangePassword ? '/profile?force=password' : user.role === 'admin' ? '/admin' : '/dashboard'}
+              onClick={() => setMobileMenuOpen(false)}
+              className="flex items-center gap-3 group transition-transform active:scale-95"
+              title="Return to Workspace Dashboard"
+            >
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl p-1 shadow-xs bg-[#0A192F] border border-[#1E3A5F]/60 group-hover:border-blue-500/50 transition-colors">
                 <img src="/cruvels-logo-transparent.png" alt="Cruvels Logo" className="h-8 w-8 object-contain" />
               </div>
               <div className="truncate min-w-0">
@@ -658,7 +743,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                   {user.primaryAlias}
                 </div>
               </div>
-            </div>
+            </Link>
 
             <button
               type="button"
@@ -837,14 +922,18 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             </button>
 
             {/* Mobile Brand Logo */}
-            <div className="flex items-center gap-2 md:hidden">
+            <Link
+              href={user?.mustChangePassword ? '/profile?force=password' : user?.role === 'admin' ? '/admin' : '/dashboard'}
+              className="flex items-center gap-2 md:hidden active:scale-95 transition-transform"
+              title="Return to Workspace Dashboard"
+            >
               <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg p-0.5 shadow-xs" style={{ background: 'var(--surface-2)', border: '1px solid var(--line)' }}>
                 <img src="/cruvels-logo-transparent.png" alt="Cruvels" className="h-5 w-5 object-contain" />
               </div>
               <span className="text-sm font-bold tracking-tight" style={{ fontFamily: 'Bricolage Grotesque, sans-serif', color: 'var(--ink)' }}>
                 Cruvels OS
               </span>
-            </div>
+            </Link>
 
             {/* Global Search Bar */}
             <form onSubmit={handleSearchSubmit} className="relative w-56 sm:w-80 md:w-96 hidden sm:block">
@@ -882,6 +971,14 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               <RefreshCw className={`h-3.5 w-3.5 ${syncing ? 'animate-spin' : ''}`} style={{ color: syncing ? 'var(--teal)' : 'var(--muted)' }} />
               <span className="hidden lg:inline">{syncing ? 'Syncing...' : 'Sync'}</span>
             </button>
+
+            {/* Ambient Offline Mode Indicator */}
+            {isOffline && (
+              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-amber-500/10 border border-amber-500/30 text-amber-600 dark:text-amber-400">
+                <WifiOff className="h-3 w-3 shrink-0" />
+                <span className="hidden sm:inline">Offline</span>
+              </div>
+            )}
 
             {/* Theme Toggle */}
             <ThemeToggle />
@@ -936,6 +1033,24 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation();
+                          setShowSoundSettings(!showSoundSettings);
+                        }}
+                        className="flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium cursor-pointer transition-colors"
+                        style={{
+                          background: customSound ? 'rgba(16, 185, 129, 0.12)' : 'var(--teal-dim)',
+                          color: customSound ? '#10B981' : 'var(--teal)',
+                          border: '1px solid var(--line)',
+                        }}
+                        title={customSound ? `Custom sound: ${customSound.name}` : 'Upload your own custom notification sound'}
+                      >
+                        <Music className="h-3 w-3" />
+                        <span>Sound</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
                           unlockAudioContext();
                           playNotificationSound();
                         }}
@@ -959,6 +1074,95 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                       )}
                     </div>
                   </div>
+
+                  {/* Custom Notification Sound Drawer */}
+                  {showSoundSettings && (
+                    <div
+                      className="p-3 border-b text-xs space-y-2 animate-in fade-in slide-in-from-top-1"
+                      style={{ background: 'var(--surface-2)', borderColor: 'var(--line)' }}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-1.5 font-bold" style={{ color: 'var(--ink)' }}>
+                          <Music className="h-3.5 w-3.5" style={{ color: 'var(--teal)' }} />
+                          <span>Notification Sound Chime</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setShowSoundSettings(false)}
+                          className="p-0.5 rounded transition-colors"
+                          style={{ color: 'var(--muted)' }}
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+
+                      <div
+                        className="flex items-center justify-between text-[11px] py-1.5 px-2.5 rounded-lg border"
+                        style={{ background: 'var(--surface)', borderColor: 'var(--line)' }}
+                      >
+                        <span style={{ color: 'var(--muted)' }}>Active Sound:</span>
+                        <span className="font-semibold truncate max-w-[170px]" style={{ color: 'var(--ink)' }}>
+                          {customSound ? customSound.name : 'System Dual-Tone Chime'}
+                        </span>
+                      </div>
+
+                      {soundUploadError && (
+                        <p className="text-[10px] text-rose-500 font-semibold">{soundUploadError}</p>
+                      )}
+
+                      <div className="flex items-center gap-1.5 pt-0.5">
+                        <input
+                          type="file"
+                          ref={soundFileInputRef}
+                          accept="audio/mp3,audio/wav,audio/ogg,audio/mpeg,audio/aac"
+                          className="hidden"
+                          onChange={handleSoundFileUpload}
+                        />
+
+                        <button
+                          type="button"
+                          onClick={() => soundFileInputRef.current?.click()}
+                          className="flex-1 py-1.5 px-2.5 rounded-lg border text-[11px] font-semibold flex items-center justify-center gap-1.5 transition-all active:scale-95 shadow-xs"
+                          style={{ background: 'var(--surface)', borderColor: 'var(--line)', color: 'var(--ink)' }}
+                        >
+                          <Upload className="h-3 w-3" style={{ color: 'var(--teal)' }} />
+                          <span>{customSound ? 'Change Sound' : 'Upload Sound'}</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            unlockAudioContext();
+                            if (customSound?.dataUrl) {
+                              playCustomAudioUrl(customSound.dataUrl);
+                            } else {
+                              playNotificationSound();
+                            }
+                          }}
+                          className="py-1.5 px-2.5 rounded-lg border text-[11px] font-semibold flex items-center justify-center gap-1 transition-all active:scale-95"
+                          style={{ background: 'var(--surface)', borderColor: 'var(--line)', color: 'var(--ink)' }}
+                          title="Preview chime"
+                        >
+                          <Play className="h-3 w-3" style={{ color: 'var(--teal)' }} />
+                          <span>Play</span>
+                        </button>
+
+                        {customSound && (
+                          <button
+                            type="button"
+                            onClick={handleResetSound}
+                            className="py-1.5 px-2 rounded-lg border border-rose-500/30 text-rose-600 hover:bg-rose-500/10 text-[11px] font-semibold flex items-center justify-center transition-all"
+                            title="Reset to default chime"
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </button>
+                        )}
+                      </div>
+                      <p className="text-[10px]" style={{ color: 'var(--muted)' }}>
+                        Upload your personal MP3, WAV, or OGG chime (&lt; 2MB).
+                      </p>
+                    </div>
+                  )}
 
                   {/* Device Notification Link Banner */}
                   {devicePermission !== 'granted' && (
@@ -1216,6 +1420,61 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
         {/* Mobile Bottom Navigation Bar (Roadmap § 26) */}
         <MobileBottomNav unreadCount={unreadCount} pendingTaskCount={pendingTaskCount} />
+
+        {/* Floating In-App Toast System */}
+        {toastMessage && (
+          <div className="fixed top-4 inset-x-4 sm:top-5 sm:right-5 sm:left-auto sm:w-[380px] z-[9999] animate-in fade-in slide-in-from-top-3 duration-200 pointer-events-auto">
+            <div
+              className="flex items-center gap-3 p-3.5 rounded-2xl shadow-2xl backdrop-blur-md border text-xs font-semibold"
+              style={{
+                background: 'var(--surface)',
+                borderColor:
+                  toastMessage.type === 'error'
+                    ? 'var(--rose)'
+                    : toastMessage.type === 'success'
+                    ? 'var(--teal)'
+                    : 'var(--teal)',
+                color: 'var(--ink)',
+                boxShadow: '0 12px 36px -4px rgba(0, 0, 0, 0.35)',
+              }}
+            >
+              <div
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl"
+                style={{
+                  background:
+                    toastMessage.type === 'error'
+                      ? 'var(--rose-wash)'
+                      : toastMessage.type === 'success'
+                      ? 'var(--teal-wash)'
+                      : 'var(--teal-wash)',
+                  color:
+                    toastMessage.type === 'error'
+                      ? 'var(--rose)'
+                      : toastMessage.type === 'success'
+                      ? 'var(--teal)'
+                      : 'var(--teal)',
+                }}
+              >
+                {toastMessage.type === 'error' ? (
+                  <AlertCircle className="h-4 w-4" />
+                ) : toastMessage.type === 'success' ? (
+                  <Check className="h-4 w-4" />
+                ) : (
+                  <Info className="h-4 w-4" />
+                )}
+              </div>
+              <div className="flex-1 leading-snug">{toastMessage.message}</div>
+              <button
+                type="button"
+                onClick={() => setToastMessage(null)}
+                className="p-1 rounded-lg hover:bg-white/10 text-[var(--muted)] hover:text-[var(--ink)] transition-colors"
+                aria-label="Dismiss notification"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

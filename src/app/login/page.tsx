@@ -22,10 +22,24 @@ import {
   Sparkles,
   Shield,
   Check,
+  Delete,
+  Fingerprint,
+  RotateCcw,
+  Smartphone,
 } from 'lucide-react';
 
 import { markTabSessionActive, validateTabSession } from '@/lib/auth/client-session';
 import { clientCache } from '@/lib/cache/clientCache';
+import {
+  MpinDeviceRecord,
+  MpinStoredUser,
+  getStoredMpinRecord,
+  saveMpinRecord,
+  clearStoredMpin,
+  updateMpinLastLogin,
+  encryptMpinSession,
+  decryptMpinSession,
+} from '@/lib/auth/mpin-crypto';
 
 const WARMUP_ROUTES = [
   '/dashboard',
@@ -79,14 +93,30 @@ function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  // Mode: 'login' | 'forgot'
-  const [view, setView] = useState<'login' | 'forgot'>('login');
+  // Mode: 'mpin' | 'login' | 'mpin-setup' | 'forgot'
+  const [view, setView] = useState<'mpin' | 'login' | 'mpin-setup' | 'forgot'>('login');
+
+  // MPIN Unlock Screen State
+  const [savedMpinRecord, setSavedMpinRecord] = useState<MpinDeviceRecord | null>(null);
+  const [mpinInput, setMpinInput] = useState('');
+  const [mpinError, setMpinError] = useState<string | null>(null);
+  const [mpinLoading, setMpinLoading] = useState(false);
+  const [mpinShake, setMpinShake] = useState(false);
+
+  // MPIN Setup State (Prompted upon first login)
+  const [setupStep, setSetupStep] = useState<'enter' | 'confirm'>('enter');
+  const [setupPin, setSetupPin] = useState('');
+  const [setupConfirmPin, setSetupConfirmPin] = useState('');
+  const [setupError, setSetupError] = useState<string | null>(null);
+  const [setupLoading, setSetupLoading] = useState(false);
+  const [setupShake, setSetupShake] = useState(false);
+  const [tempSessionPayload, setTempSessionPayload] = useState<{ token: string; user: MpinStoredUser } | null>(null);
 
   // Login form state
   const [usernameOrEmail, setUsernameOrEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [rememberMe, setRememberMe] = useState(false);
+  const [rememberMe, setRememberMe] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(() => {
     return searchParams.get('message') === 'password_updated'
@@ -116,6 +146,16 @@ function LoginForm() {
     timestamp?: string;
   } | null>(null);
   const [forgotError, setForgotError] = useState<string | null>(null);
+
+  // Detect saved MPIN on initial device mount
+  useEffect(() => {
+    const record = getStoredMpinRecord();
+    const forcePassword = searchParams.get('mode') === 'password' || searchParams.get('action') === 'switch_account';
+    if (record && !forcePassword) {
+      setSavedMpinRecord(record);
+      setView('mpin');
+    }
+  }, [searchParams]);
 
   // Read current theme on mount
   useEffect(() => {
@@ -159,8 +199,8 @@ function LoginForm() {
           router.prefetch('/dashboard');
         } catch {}
         if (!isCancelled) {
-          setWarmedCount(1);
           setWarmupStatus('ready');
+          setWarmedCount(WARMUP_ROUTES.length);
         }
         return;
       }
@@ -196,11 +236,14 @@ function LoginForm() {
     };
   }, [router]);
 
-  // Session validation
+  // Session validation - only auto-navigate if active session and NOT viewing MPIN lock screen
   useEffect(() => {
     let mounted = true;
     validateTabSession().then((isActive) => {
       if (!mounted || !isActive) return;
+      // If user has an active MPIN lock screen on device, let them unlock it
+      if (getStoredMpinRecord() && view === 'mpin') return;
+
       fetch('/api/auth/me')
         .then((r) => (r.ok ? r.json() : null))
         .then((data) => {
@@ -218,8 +261,239 @@ function LoginForm() {
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [view]);
 
+  /* ──────────────────────────────────────────────────────────────────────────
+     MPIN UNLOCK LOGIC (Subsequent Logins)
+     ────────────────────────────────────────────────────────────────────────── */
+  const handleUnlockWithPin = async (pin: string) => {
+    if (!savedMpinRecord) return;
+    setMpinLoading(true);
+    setMpinError(null);
+
+    try {
+      // 1. Decrypt token using Web Crypto API (PBKDF2 + AES-GCM)
+      let decrypted: { token: string; user: MpinStoredUser };
+      try {
+        decrypted = await decryptMpinSession(pin, savedMpinRecord);
+      } catch {
+        setMpinShake(true);
+        setTimeout(() => setMpinShake(false), 500);
+        setMpinError('Incorrect MPIN. Please try again.');
+        setMpinInput('');
+        setMpinLoading(false);
+        return;
+      }
+
+      // 2. Validate token and establish persistent session cookie
+      const res = await fetch('/api/auth/mpin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          token: decrypted.token,
+          userId: savedMpinRecord.user.id,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok || !data.success) {
+        if (data.requiresPasswordLogin) {
+          setMpinError('Saved session expired. Please sign in with your password.');
+          setTimeout(() => {
+            setView('login');
+            setUsernameOrEmail(savedMpinRecord.user.username || savedMpinRecord.user.primaryAlias || '');
+          }, 1500);
+          setMpinLoading(false);
+          return;
+        }
+        setMpinShake(true);
+        setTimeout(() => setMpinShake(false), 500);
+        setMpinError(data.error || 'Failed to authenticate with MPIN.');
+        setMpinInput('');
+        setMpinLoading(false);
+        return;
+      }
+
+      // 3. Mark session active and update local state
+      markTabSessionActive(true);
+      updateMpinLastLogin();
+
+      if (data.user) {
+        clientCache.setUserScope(data.user.id);
+        clientCache.set('session_user', undefined, data.user);
+      }
+
+      if (data.user?.mustChangePassword) {
+        window.location.href = '/profile?force=password';
+        return;
+      }
+
+      if (data.user?.role === 'admin') {
+        window.location.href = '/admin';
+      } else {
+        window.location.href = '/dashboard';
+      }
+    } catch {
+      setMpinError('Network or verification error. Please try again.');
+      setMpinLoading(false);
+    }
+  };
+
+  const handleMpinKeyClick = (digit: string) => {
+    if (mpinLoading) return;
+    if (digit === 'backspace') {
+      setMpinInput((prev) => prev.slice(0, -1));
+      setMpinError(null);
+      return;
+    }
+    if (digit === 'clear') {
+      setMpinInput('');
+      setMpinError(null);
+      return;
+    }
+
+    if (mpinInput.length < 4) {
+      const next = mpinInput + digit;
+      setMpinInput(next);
+      setMpinError(null);
+      if (next.length === 4) {
+        handleUnlockWithPin(next);
+      }
+    }
+  };
+
+  /* ──────────────────────────────────────────────────────────────────────────
+     MPIN SETUP LOGIC (First Login Flow)
+     ────────────────────────────────────────────────────────────────────────── */
+  const handleSetupKeyClick = (digit: string) => {
+    if (setupLoading) return;
+    if (digit === 'backspace') {
+      if (setupStep === 'enter') {
+        setSetupPin((prev) => prev.slice(0, -1));
+      } else {
+        setSetupConfirmPin((prev) => prev.slice(0, -1));
+      }
+      setSetupError(null);
+      return;
+    }
+    if (digit === 'clear') {
+      if (setupStep === 'enter') {
+        setSetupPin('');
+      } else {
+        setSetupConfirmPin('');
+      }
+      setSetupError(null);
+      return;
+    }
+
+    if (setupStep === 'enter') {
+      if (setupPin.length < 4) {
+        const next = setupPin + digit;
+        setSetupPin(next);
+        setSetupError(null);
+        if (next.length === 4) {
+          setTimeout(() => {
+            setSetupStep('confirm');
+          }, 200);
+        }
+      }
+    } else {
+      if (setupConfirmPin.length < 4) {
+        const next = setupConfirmPin + digit;
+        setSetupConfirmPin(next);
+        setSetupError(null);
+        if (next.length === 4) {
+          handleFinishSetup(setupPin, next);
+        }
+      }
+    }
+  };
+
+  const handleFinishSetup = async (pin: string, confirmed: string) => {
+    if (pin !== confirmed) {
+      setSetupShake(true);
+      setTimeout(() => setSetupShake(false), 500);
+      setSetupError('PINs do not match. Please re-enter your 4-digit PIN.');
+      setSetupConfirmPin('');
+      setSetupPin('');
+      setSetupStep('enter');
+      return;
+    }
+
+    if (!tempSessionPayload) {
+      window.location.href = '/dashboard';
+      return;
+    }
+
+    setSetupLoading(true);
+    setSetupError(null);
+
+    try {
+      const record = await encryptMpinSession(pin, tempSessionPayload);
+      saveMpinRecord(record);
+      setSavedMpinRecord(record);
+
+      if (tempSessionPayload.user?.mustChangePassword) {
+        window.location.href = '/profile?force=password';
+      } else if (tempSessionPayload.user?.role === 'admin') {
+        window.location.href = '/admin';
+      } else {
+        window.location.href = '/dashboard';
+      }
+    } catch {
+      setSetupError('Unable to encrypt MPIN. Proceeding to workspace.');
+      setTimeout(() => {
+        window.location.href = '/dashboard';
+      }, 1000);
+    }
+  };
+
+  const handleSkipMpinSetup = () => {
+    if (tempSessionPayload?.user?.mustChangePassword) {
+      window.location.href = '/profile?force=password';
+    } else if (tempSessionPayload?.user?.role === 'admin') {
+      window.location.href = '/admin';
+    } else {
+      window.location.href = '/dashboard';
+    }
+  };
+
+  // Keyboard navigation support for PIN entry
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (view === 'mpin') {
+        if (/^[0-9]$/.test(e.key)) {
+          e.preventDefault();
+          handleMpinKeyClick(e.key);
+        } else if (e.key === 'Backspace') {
+          e.preventDefault();
+          handleMpinKeyClick('backspace');
+        } else if (e.key === 'Escape') {
+          e.preventDefault();
+          handleMpinKeyClick('clear');
+        }
+      } else if (view === 'mpin-setup') {
+        if (/^[0-9]$/.test(e.key)) {
+          e.preventDefault();
+          handleSetupKeyClick(e.key);
+        } else if (e.key === 'Backspace') {
+          e.preventDefault();
+          handleSetupKeyClick('backspace');
+        } else if (e.key === 'Escape') {
+          e.preventDefault();
+          handleSetupKeyClick('clear');
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [view, mpinInput, mpinLoading, setupStep, setupPin, setupConfirmPin, setupLoading, savedMpinRecord, tempSessionPayload]);
+
+  /* ──────────────────────────────────────────────────────────────────────────
+     CREDENTIALS LOGIN (First Login or Manual Fallback)
+     ────────────────────────────────────────────────────────────────────────── */
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const cleanIdent = usernameOrEmail.trim();
@@ -255,6 +529,32 @@ function LoginForm() {
       if (data.user) {
         clientCache.setUserScope(data.user.id);
         clientCache.set('session_user', undefined, data.user);
+      }
+
+      // Check if MPIN is already configured for this user on this device
+      const existing = getStoredMpinRecord();
+      if (!existing || existing.user.id !== data.user?.id) {
+        // Prompt user to set up their 4-digit MPIN for future one-tap access
+        setTempSessionPayload({
+          token: data.token,
+          user: {
+            id: data.user.id,
+            name: data.user.name,
+            username: data.user.username,
+            role: data.user.role,
+            status: data.user.status,
+            primaryAlias: data.user.primaryAlias,
+            designation: data.user.designation,
+            squad: data.user.squad,
+            department: data.user.department,
+          },
+        });
+        setSetupStep('enter');
+        setSetupPin('');
+        setSetupConfirmPin('');
+        setView('mpin-setup');
+        setLoading(false);
+        return;
       }
 
       if (data.user?.mustChangePassword) {
@@ -314,9 +614,25 @@ function LoginForm() {
     setForgotEmail('');
     setForgotRole('intern');
     setForgotReason('');
-    setForgotError(null);
     setForgotSuccess(false);
     setForgotResult(null);
+    setForgotError(null);
+  };
+
+  const handleSwitchAccount = () => {
+    setView('login');
+    setUsernameOrEmail('');
+    setPassword('');
+    setError(null);
+  };
+
+  const handleResetSavedMpin = () => {
+    clearStoredMpin();
+    setSavedMpinRecord(null);
+    setView('login');
+    setUsernameOrEmail('');
+    setPassword('');
+    setError(null);
   };
 
   return (
@@ -443,9 +759,341 @@ function LoginForm() {
           />
 
           {/* ═══════════════════════════════════════════════════════════
-              VIEW 1: SIGN IN FORM
+              VIEW 1: MPIN UNLOCK SCREEN (Returning Device User)
              ═══════════════════════════════════════════════════════════ */}
-          {view === 'login' ? (
+          {view === 'mpin' && savedMpinRecord ? (
+            <div className="animate-in fade-in zoom-in-95 duration-200">
+              {/* User Details Header */}
+              <div className="flex flex-col items-center text-center mb-6">
+                <div className="relative mb-3">
+                  <div className="h-16 w-16 rounded-2xl bg-gradient-to-tr from-blue-600 via-indigo-600 to-teal-500 shadow-lg flex items-center justify-center text-2xl font-black text-white border-2 border-white/20">
+                    {savedMpinRecord.user.name.charAt(0).toUpperCase()}
+                  </div>
+                  <span className="absolute -bottom-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-emerald-500 border-2 border-white dark:border-slate-900" title="Active Trusted Device">
+                    <Check className="h-2.5 w-2.5 text-white stroke-[3]" />
+                  </span>
+                </div>
+
+                <span className="text-[11px] font-bold tracking-wider uppercase text-blue-600 dark:text-blue-400">
+                  Welcome Back
+                </span>
+                <h2
+                  className="text-xl sm:text-2xl font-black tracking-tight mt-0.5"
+                  style={{ fontFamily: 'Bricolage Grotesque, sans-serif', color: 'var(--ink)' }}
+                >
+                  {savedMpinRecord.user.name}
+                </h2>
+
+                <div className="flex items-center gap-1.5 flex-wrap justify-center mt-1.5">
+                  <span
+                    className="rounded-full px-2.5 py-0.5 text-[11px] font-bold"
+                    style={{ background: 'var(--teal-wash)', color: 'var(--teal-ink)', border: '1px solid var(--line)' }}
+                  >
+                    {savedMpinRecord.user.role.toUpperCase()}
+                  </span>
+                  {(savedMpinRecord.user.squad || savedMpinRecord.user.designation) && (
+                    <span
+                      className="rounded-full px-2.5 py-0.5 text-[11px] font-medium"
+                      style={{ background: 'var(--surface-2)', color: 'var(--muted)', border: '1px solid var(--line)' }}
+                    >
+                      {savedMpinRecord.user.squad ? `Squad: ${savedMpinRecord.user.squad}` : savedMpinRecord.user.designation}
+                    </span>
+                  )}
+                </div>
+
+                <p className="text-[11px] mt-2 font-medium" style={{ color: 'var(--muted)' }}>
+                  Enter your 4-digit MPIN to unlock your workspace
+                </p>
+              </div>
+
+              {/* 4 PIN Dots */}
+              <div className={`flex items-center justify-center gap-4 my-4 ${mpinShake ? 'animate-shake' : ''}`}>
+                {[0, 1, 2, 3].map((idx) => {
+                  const isFilled = mpinInput.length > idx;
+                  const isCurrent = mpinInput.length === idx;
+                  return (
+                    <div
+                      key={idx}
+                      className={`h-4 w-4 rounded-full transition-all duration-200 ${
+                        isFilled
+                          ? 'bg-blue-600 scale-125 shadow-[0_0_12px_rgba(37,99,235,0.6)]'
+                          : isCurrent
+                          ? 'border-2 border-blue-500 bg-transparent scale-110'
+                          : 'border-2 border-[var(--line)] bg-[var(--surface-2)]'
+                      }`}
+                    />
+                  );
+                })}
+              </div>
+
+              {/* Error / Loading Feedback */}
+              {mpinError && (
+                <div className="mb-3 flex items-center justify-center gap-2 text-xs font-semibold text-rose-500 animate-in fade-in">
+                  <AlertCircle className="h-4 w-4 shrink-0" />
+                  <span>{mpinError}</span>
+                </div>
+              )}
+
+              {mpinLoading && (
+                <div className="mb-3 flex items-center justify-center gap-2 text-xs font-semibold text-blue-600 dark:text-blue-400 animate-pulse">
+                  <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-blue-600 border-t-transparent" />
+                  <span>Decrypting session & unlocking...</span>
+                </div>
+              )}
+
+              {/* Numeric Keypad */}
+              <div className="grid grid-cols-3 gap-2.5 max-w-[290px] mx-auto select-none mt-4">
+                {[
+                  { num: '1', letters: '' },
+                  { num: '2', letters: 'ABC' },
+                  { num: '3', letters: 'DEF' },
+                  { num: '4', letters: 'GHI' },
+                  { num: '5', letters: 'JKL' },
+                  { num: '6', letters: 'MNO' },
+                  { num: '7', letters: 'PQRS' },
+                  { num: '8', letters: 'TUV' },
+                  { num: '9', letters: 'WXYZ' },
+                ].map((k) => (
+                  <button
+                    key={k.num}
+                    type="button"
+                    onClick={() => handleMpinKeyClick(k.num)}
+                    disabled={mpinLoading}
+                    className="flex flex-col items-center justify-center h-14 rounded-2xl border transition-all active:scale-95 touch-manipulation hover:bg-[var(--surface-hover)] shadow-xs cursor-pointer"
+                    style={{
+                      background: 'var(--surface-2)',
+                      borderColor: 'var(--line)',
+                      color: 'var(--ink)',
+                    }}
+                  >
+                    <span className="text-xl font-bold leading-none">{k.num}</span>
+                    {k.letters && <span className="text-[9px] font-semibold text-[var(--muted)] tracking-wider mt-0.5">{k.letters}</span>}
+                  </button>
+                ))}
+                {/* Row 4 */}
+                <button
+                  type="button"
+                  onClick={() => handleMpinKeyClick('clear')}
+                  disabled={mpinLoading}
+                  className="flex items-center justify-center h-14 rounded-2xl border text-xs font-bold transition-all active:scale-95 touch-manipulation hover:bg-[var(--surface-hover)] shadow-xs text-[var(--muted)] cursor-pointer"
+                  style={{
+                    background: 'var(--surface)',
+                    borderColor: 'var(--line)',
+                  }}
+                >
+                  Clear
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleMpinKeyClick('0')}
+                  disabled={mpinLoading}
+                  className="flex flex-col items-center justify-center h-14 rounded-2xl border transition-all active:scale-95 touch-manipulation hover:bg-[var(--surface-hover)] shadow-xs cursor-pointer"
+                  style={{
+                    background: 'var(--surface-2)',
+                    borderColor: 'var(--line)',
+                    color: 'var(--ink)',
+                  }}
+                >
+                  <span className="text-xl font-bold leading-none">0</span>
+                  <span className="text-[9px] font-semibold text-[var(--muted)] tracking-wider mt-0.5">+</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleMpinKeyClick('backspace')}
+                  disabled={mpinLoading}
+                  className="flex items-center justify-center h-14 rounded-2xl border transition-all active:scale-95 touch-manipulation hover:bg-[var(--surface-hover)] shadow-xs cursor-pointer"
+                  style={{
+                    background: 'var(--surface)',
+                    borderColor: 'var(--line)',
+                    color: 'var(--ink)',
+                  }}
+                  aria-label="Backspace"
+                >
+                  <Delete className="h-5 w-5 text-[var(--muted)]" />
+                </button>
+              </div>
+
+              {/* Alternative Actions */}
+              <div className="mt-6 flex flex-col items-center gap-2 pt-4 border-t border-[var(--line-soft)]">
+                <button
+                  type="button"
+                  onClick={handleSwitchAccount}
+                  className="text-xs font-bold transition-colors hover:underline text-blue-600 dark:text-blue-400 cursor-pointer"
+                >
+                  Forgot MPIN? Sign in with password
+                </button>
+
+                <div className="flex items-center gap-3 text-[11px] text-[var(--muted)] mt-1">
+                  <button
+                    type="button"
+                    onClick={handleSwitchAccount}
+                    className="hover:underline cursor-pointer"
+                  >
+                    Switch Account
+                  </button>
+                  <span>•</span>
+                  <button
+                    type="button"
+                    onClick={handleResetSavedMpin}
+                    className="hover:underline text-rose-500 cursor-pointer"
+                  >
+                    Reset Saved PIN
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : view === 'mpin-setup' ? (
+            /* ═══════════════════════════════════════════════════════════
+               VIEW 2: SET UP 4-DIGIT MPIN (First Login Flow)
+               ═══════════════════════════════════════════════════════════ */
+            <div className="animate-in fade-in zoom-in-95 duration-200">
+              {/* Setup Header */}
+              <div className="flex flex-col items-center text-center mb-5">
+                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-500/10 border border-blue-500/20 text-blue-600 dark:text-blue-400 mb-3 shadow-xs">
+                  <KeyRound className="h-6 w-6" />
+                </div>
+
+                <span className="text-[10px] font-bold tracking-wider uppercase text-blue-600 dark:text-blue-400">
+                  {setupStep === 'enter' ? 'Step 1 of 2: Create MPIN' : 'Step 2 of 2: Confirm MPIN'}
+                </span>
+
+                <h2
+                  className="text-xl font-black tracking-tight mt-1"
+                  style={{ fontFamily: 'Bricolage Grotesque, sans-serif', color: 'var(--ink)' }}
+                >
+                  {setupStep === 'enter' ? 'Set Up 4-Digit Quick MPIN' : 'Confirm Your 4-Digit MPIN'}
+                </h2>
+
+                <p className="text-[11px] mt-1 max-w-xs leading-relaxed" style={{ color: 'var(--muted)' }}>
+                  {setupStep === 'enter'
+                    ? 'Create a 4-digit MPIN for instant, one-tap unlocking on this mobile device without re-entering your full password.'
+                    : 'Re-enter your 4-digit PIN to verify and lock it to this device.'}
+                </p>
+              </div>
+
+              {/* 4 PIN Setup Dots */}
+              <div className={`flex items-center justify-center gap-4 my-4 ${setupShake ? 'animate-shake' : ''}`}>
+                {[0, 1, 2, 3].map((idx) => {
+                  const currentPin = setupStep === 'enter' ? setupPin : setupConfirmPin;
+                  const isFilled = currentPin.length > idx;
+                  const isCurrent = currentPin.length === idx;
+                  return (
+                    <div
+                      key={idx}
+                      className={`h-4 w-4 rounded-full transition-all duration-200 ${
+                        isFilled
+                          ? 'bg-blue-600 scale-125 shadow-[0_0_12px_rgba(37,99,235,0.6)]'
+                          : isCurrent
+                          ? 'border-2 border-blue-500 bg-transparent scale-110'
+                          : 'border-2 border-[var(--line)] bg-[var(--surface-2)]'
+                      }`}
+                    />
+                  );
+                })}
+              </div>
+
+              {/* Error / Loading Feedback */}
+              {setupError && (
+                <div className="mb-3 flex items-center justify-center gap-2 text-xs font-semibold text-rose-500 animate-in fade-in">
+                  <AlertCircle className="h-4 w-4 shrink-0" />
+                  <span>{setupError}</span>
+                </div>
+              )}
+
+              {setupLoading && (
+                <div className="mb-3 flex items-center justify-center gap-2 text-xs font-semibold text-blue-600 dark:text-blue-400 animate-pulse">
+                  <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-blue-600 border-t-transparent" />
+                  <span>Encrypting & binding MPIN to device...</span>
+                </div>
+              )}
+
+              {/* Numeric Keypad for Setup */}
+              <div className="grid grid-cols-3 gap-2.5 max-w-[290px] mx-auto select-none mt-4">
+                {[
+                  { num: '1', letters: '' },
+                  { num: '2', letters: 'ABC' },
+                  { num: '3', letters: 'DEF' },
+                  { num: '4', letters: 'GHI' },
+                  { num: '5', letters: 'JKL' },
+                  { num: '6', letters: 'MNO' },
+                  { num: '7', letters: 'PQRS' },
+                  { num: '8', letters: 'TUV' },
+                  { num: '9', letters: 'WXYZ' },
+                ].map((k) => (
+                  <button
+                    key={k.num}
+                    type="button"
+                    onClick={() => handleSetupKeyClick(k.num)}
+                    disabled={setupLoading}
+                    className="flex flex-col items-center justify-center h-14 rounded-2xl border transition-all active:scale-95 touch-manipulation hover:bg-[var(--surface-hover)] shadow-xs cursor-pointer"
+                    style={{
+                      background: 'var(--surface-2)',
+                      borderColor: 'var(--line)',
+                      color: 'var(--ink)',
+                    }}
+                  >
+                    <span className="text-xl font-bold leading-none">{k.num}</span>
+                    {k.letters && <span className="text-[9px] font-semibold text-[var(--muted)] tracking-wider mt-0.5">{k.letters}</span>}
+                  </button>
+                ))}
+                {/* Row 4 */}
+                <button
+                  type="button"
+                  onClick={() => handleSetupKeyClick('clear')}
+                  disabled={setupLoading}
+                  className="flex items-center justify-center h-14 rounded-2xl border text-xs font-bold transition-all active:scale-95 touch-manipulation hover:bg-[var(--surface-hover)] shadow-xs text-[var(--muted)] cursor-pointer"
+                  style={{
+                    background: 'var(--surface)',
+                    borderColor: 'var(--line)',
+                  }}
+                >
+                  Clear
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSetupKeyClick('0')}
+                  disabled={setupLoading}
+                  className="flex flex-col items-center justify-center h-14 rounded-2xl border transition-all active:scale-95 touch-manipulation hover:bg-[var(--surface-hover)] shadow-xs cursor-pointer"
+                  style={{
+                    background: 'var(--surface-2)',
+                    borderColor: 'var(--line)',
+                    color: 'var(--ink)',
+                  }}
+                >
+                  <span className="text-xl font-bold leading-none">0</span>
+                  <span className="text-[9px] font-semibold text-[var(--muted)] tracking-wider mt-0.5">+</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSetupKeyClick('backspace')}
+                  disabled={setupLoading}
+                  className="flex items-center justify-center h-14 rounded-2xl border transition-all active:scale-95 touch-manipulation hover:bg-[var(--surface-hover)] shadow-xs cursor-pointer"
+                  style={{
+                    background: 'var(--surface)',
+                    borderColor: 'var(--line)',
+                    color: 'var(--ink)',
+                  }}
+                  aria-label="Backspace"
+                >
+                  <Delete className="h-5 w-5 text-[var(--muted)]" />
+                </button>
+              </div>
+
+              {/* Skip option */}
+              <div className="mt-6 flex justify-center pt-4 border-t border-[var(--line-soft)]">
+                <button
+                  type="button"
+                  onClick={handleSkipMpinSetup}
+                  className="text-xs font-semibold text-[var(--muted)] hover:text-[var(--ink)] transition-colors cursor-pointer"
+                >
+                  Skip for now, continue to workspace →
+                </button>
+              </div>
+            </div>
+          ) : view === 'login' ? (
+            /* ═══════════════════════════════════════════════════════════
+               VIEW 3: STANDARD EMAIL/PASSWORD LOGIN
+               ═══════════════════════════════════════════════════════════ */
             <>
               {/* Password Updated Success Notification */}
               {successMessage && (
@@ -469,15 +1117,45 @@ function LoginForm() {
                   style={{
                     borderColor: 'rgba(217,154,31,0.4)',
                     background: 'rgba(217,154,31,0.08)',
-                    color: '#d97706',
+                    color: '#b45309',
                   }}
                 >
                   <AlertCircle className="h-4 w-4 shrink-0 mt-0.5 text-amber-600" />
-                  <div className="leading-relaxed font-medium">{infoMessage}</div>
+                  <div className="leading-relaxed font-semibold">{infoMessage}</div>
                 </div>
               )}
 
-              {/* Error Notification */}
+              {/* Form Title & Switch to MPIN if available */}
+              <div className="mb-5 flex items-center justify-between">
+                <div>
+                  <h2
+                    className="text-lg font-bold tracking-tight"
+                    style={{ fontFamily: 'Bricolage Grotesque, sans-serif', color: 'var(--ink)' }}
+                  >
+                    Sign In to Cruvels
+                  </h2>
+                  <p className="text-xs mt-0.5" style={{ color: 'var(--muted)' }}>
+                    Enter company credentials to continue
+                  </p>
+                </div>
+
+                {savedMpinRecord && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setView('mpin');
+                      setMpinInput('');
+                      setMpinError(null);
+                    }}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-bold text-blue-600 dark:text-blue-400 bg-blue-500/10 border-blue-500/20 shadow-xs hover:scale-105 active:scale-95 transition-all cursor-pointer"
+                  >
+                    <KeyRound className="h-3.5 w-3.5" />
+                    <span>Use Quick PIN</span>
+                  </button>
+                )}
+              </div>
+
+              {/* Error Message */}
               {error && (
                 <div
                   className="mb-5 flex items-start gap-3 rounded-xl p-3.5 text-xs animate-in fade-in slide-in-from-top-1 border"
@@ -488,154 +1166,139 @@ function LoginForm() {
                   }}
                 >
                   <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
-                  <div className="leading-relaxed font-medium">{error}</div>
+                  <div className="leading-relaxed font-semibold">{error}</div>
                 </div>
               )}
 
-              {/* Form */}
               <form onSubmit={handleSubmit} className="space-y-4">
-                {/* Username / Email field */}
-                <div>
+                {/* Username or Email Input */}
+                <div className="space-y-1.5">
                   <label
-                    htmlFor="login-username"
-                    className="block text-[11px] font-bold uppercase tracking-wider mb-1.5"
-                    style={{ color: 'var(--muted)' }}
+                    htmlFor="usernameOrEmail"
+                    className="block text-xs font-bold tracking-wide"
+                    style={{ color: 'var(--ink)' }}
                   >
                     Username or Company Email
                   </label>
-                  <div className="relative group">
+                  <div className="relative">
                     <div
-                      className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 transition-colors group-focus-within:text-blue-600"
+                      className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5"
                       style={{ color: 'var(--muted)' }}
                     >
                       <Mail className="h-4 w-4" />
                     </div>
                     <input
+                      id="usernameOrEmail"
                       type="text"
-                      id="login-username"
                       autoComplete="username"
                       required
                       value={usernameOrEmail}
                       onChange={(e) => setUsernameOrEmail(e.target.value)}
-                      placeholder="name@cruvels.com or username"
+                      placeholder="e.g. john or john@cruvels.com"
+                      className="w-full rounded-xl py-2.5 pl-10 pr-4 text-xs font-medium placeholder:text-[var(--muted)] border transition-all focus:outline-none focus:ring-2 focus:ring-[var(--teal)]"
                       style={{
-                        border: '1px solid var(--line)',
-                        background: 'var(--surface-2)',
+                        background: 'var(--paper)',
+                        borderColor: 'var(--line)',
                         color: 'var(--ink)',
-                        fontFamily: 'Archivo, sans-serif',
                       }}
-                      className="w-full rounded-xl py-2.5 pl-10 pr-4 text-xs font-medium placeholder:text-[var(--muted)] focus:outline-none focus:ring-2 focus:ring-[var(--teal)] focus:border-transparent transition-all"
                     />
                   </div>
                 </div>
 
-                {/* Password field */}
-                <div>
-                  <div className="mb-1.5">
+                {/* Password Input */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
                     <label
-                      htmlFor="login-password"
-                      className="block text-[11px] font-bold uppercase tracking-wider"
-                      style={{ color: 'var(--muted)' }}
+                      htmlFor="password"
+                      className="block text-xs font-bold tracking-wide"
+                      style={{ color: 'var(--ink)' }}
                     >
                       Password
                     </label>
+                    <button
+                      type="button"
+                      onClick={() => setView('forgot')}
+                      className="text-[11px] font-semibold transition-colors hover:underline cursor-pointer"
+                      style={{ color: 'var(--teal)' }}
+                    >
+                      Forgot password?
+                    </button>
                   </div>
-
-                  <div className="relative group">
+                  <div className="relative">
                     <div
-                      className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 transition-colors group-focus-within:text-blue-600"
+                      className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5"
                       style={{ color: 'var(--muted)' }}
                     >
                       <Lock className="h-4 w-4" />
                     </div>
                     <input
+                      id="password"
                       type={showPassword ? 'text' : 'password'}
-                      id="login-password"
                       autoComplete="current-password"
                       required
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
-                      placeholder="••••••••••••"
+                      placeholder="Enter your account password"
+                      className="w-full rounded-xl py-2.5 pl-10 pr-10 text-xs font-medium placeholder:text-[var(--muted)] border transition-all focus:outline-none focus:ring-2 focus:ring-[var(--teal)]"
                       style={{
-                        border: '1px solid var(--line)',
-                        background: 'var(--surface-2)',
+                        background: 'var(--paper)',
+                        borderColor: 'var(--line)',
                         color: 'var(--ink)',
-                        fontFamily: 'Archivo, sans-serif',
                       }}
-                      className="w-full rounded-xl py-2.5 pl-10 pr-10 text-xs font-medium placeholder:text-[var(--muted)] focus:outline-none focus:ring-2 focus:ring-[var(--teal)] focus:border-transparent transition-all"
                     />
                     <button
                       type="button"
                       onClick={() => setShowPassword(!showPassword)}
-                      className="absolute inset-y-0 right-0 flex items-center pr-3.5 transition-colors hover:opacity-80 cursor-pointer"
+                      className="absolute inset-y-0 right-0 flex items-center pr-3.5 transition-colors cursor-pointer"
                       style={{ color: 'var(--muted)' }}
-                      aria-label="Toggle password visibility"
+                      aria-label={showPassword ? 'Hide password' : 'Show password'}
                     >
                       {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                     </button>
                   </div>
                 </div>
 
-                {/* Remember me & Forgot Password Link with Key Icon */}
+                {/* Remember Device Checkbox */}
                 <div className="flex items-center justify-between pt-1">
                   <label className="flex items-center gap-2 cursor-pointer select-none">
                     <input
                       type="checkbox"
                       checked={rememberMe}
                       onChange={(e) => setRememberMe(e.target.checked)}
-                      className="h-3.5 w-3.5 rounded cursor-pointer transition-all"
-                      style={{ accentColor: 'var(--teal)' }}
+                      className="h-4 w-4 rounded text-blue-600 focus:ring-[var(--teal)] cursor-pointer"
                     />
-                    <span className="text-xs font-medium" style={{ color: 'var(--muted)' }}>
-                      Remember credentials
+                    <span className="text-xs font-semibold" style={{ color: 'var(--ink)' }}>
+                      Keep me signed in on this device
                     </span>
                   </label>
-
-                  {/* Forgot Password Action Link with Key design and hover effect */}
-                  <button
-                    type="button"
-                    id="forgot-password-btn"
-                    onClick={() => {
-                      setView('forgot');
-                      setError(null);
-                      setSuccessMessage(null);
-                      setInfoMessage(null);
-                      if (usernameOrEmail.trim()) {
-                        setForgotEmail(usernameOrEmail.trim());
-                      }
-                    }}
-                    className="text-xs font-bold transition-all hover:underline cursor-pointer flex items-center gap-1 group py-0.5 px-2 rounded-md hover:bg-black/5 dark:hover:bg-white/10"
-                    style={{ color: 'var(--teal)' }}
-                  >
-                    <KeyRound className="h-3.5 w-3.5 transition-transform group-hover:rotate-12" />
-                    <span>Forgot password?</span>
-                  </button>
                 </div>
 
-                {/* Submit button */}
+                {/* Submit Button */}
                 <button
                   type="submit"
-                  id="login-submit"
                   disabled={loading}
                   className="glow-btn-primary w-full flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-bold text-white shadow-md disabled:opacity-50 transition-all cursor-pointer mt-4"
                 >
                   {loading ? (
-                    <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                    <>
+                      <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                      <span>Authenticating Identity...</span>
+                    </>
                   ) : (
                     <>
-                      <span>Sign In to Workplace OS</span>
+                      <span>Sign In to Portal</span>
                       <ArrowRight className="h-4 w-4" />
                     </>
                   )}
                 </button>
 
-                {/* System Warmup Indicator */}
+                {/* Pre-compilation status indicator */}
                 <div
-                  className="mt-2 pt-2 flex items-center justify-center gap-2 text-[10px] font-medium select-none"
+                  className="flex items-center justify-center gap-2 text-[10px] font-semibold text-center mt-3 pt-2 border-t border-[var(--line-soft)]"
                   style={{ color: 'var(--muted)' }}
                 >
                   <span
-                    className="h-1.5 w-1.5 rounded-full transition-all duration-300 shrink-0"
+                    className="h-1.5 w-1.5 rounded-full"
                     style={{
                       background:
                         warmupStatus === 'ready'
@@ -663,7 +1326,7 @@ function LoginForm() {
             </>
           ) : (
             /* ═══════════════════════════════════════════════════════════
-               VIEW 2: FORGOT PASSWORD & HIGHER OFFICIALS ESCALATION
+               VIEW 4: FORGOT PASSWORD & HIGHER OFFICIALS ESCALATION
                ═══════════════════════════════════════════════════════════ */
             <div className="animate-in fade-in slide-in-from-right-3 duration-200">
               {/* Back to Login Button */}
@@ -671,14 +1334,14 @@ function LoginForm() {
                 <button
                   type="button"
                   onClick={() => {
-                    setView('login');
+                    setView(savedMpinRecord ? 'mpin' : 'login');
                     resetForgotState();
                   }}
                   className="flex items-center gap-1.5 text-xs font-bold transition-all hover:opacity-80 cursor-pointer"
                   style={{ color: 'var(--teal)' }}
                 >
                   <ArrowLeft className="h-3.5 w-3.5" />
-                  <span>Back to Sign In</span>
+                  <span>Back to {savedMpinRecord ? 'Quick PIN' : 'Sign In'}</span>
                 </button>
               </div>
 
@@ -758,20 +1421,12 @@ function LoginForm() {
                           {forgotResult?.declaredRole || forgotRole.toUpperCase()}
                         </span>
                       </div>
-                      <div className="pt-1 border-t" style={{ borderColor: 'var(--line-soft)' }}>
-                        <span className="font-semibold block mb-0.5" style={{ color: 'var(--muted)' }}>
-                          Notified Higher Officials:
-                        </span>
-                        <span className="font-medium text-[11px] leading-relaxed">
-                          {forgotResult?.officialsSummary || 'Supervising Manager & Admin Team'}
-                        </span>
+                      <div className="flex justify-between items-center">
+                        <span className="font-semibold" style={{ color: 'var(--muted)' }}>Escalated To:</span>
+                        <span className="font-semibold">{forgotResult?.officialsSummary || 'Higher Officials'}</span>
                       </div>
                     </div>
                   </div>
-
-                  <p className="text-[11px] text-center" style={{ color: 'var(--muted)' }}>
-                    Once your supervisor approves and resets your temporary password, you may sign in.
-                  </p>
 
                   <button
                     type="button"
@@ -785,141 +1440,111 @@ function LoginForm() {
                   </button>
                 </div>
               ) : (
-                /* Forgot Password Form */
-                <form onSubmit={handleForgotPasswordSubmit} className="space-y-4">
-                  {/* Email Input */}
-                  <div>
+                <form onSubmit={handleForgotPasswordSubmit} className="space-y-3.5">
+                  <div className="space-y-1">
                     <label
-                      htmlFor="forgot-email"
-                      className="block text-[11px] font-bold uppercase tracking-wider mb-1.5"
-                      style={{ color: 'var(--muted)' }}
+                      htmlFor="forgotEmail"
+                      className="block text-xs font-bold tracking-wide"
+                      style={{ color: 'var(--ink)' }}
                     >
                       Registered Email or Username
                     </label>
-                    <div className="relative group">
+                    <div className="relative">
                       <div
-                        className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 transition-colors group-focus-within:text-blue-600"
+                        className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5"
                         style={{ color: 'var(--muted)' }}
                       >
                         <Mail className="h-4 w-4" />
                       </div>
                       <input
+                        id="forgotEmail"
                         type="text"
-                        id="forgot-email"
                         required
                         value={forgotEmail}
                         onChange={(e) => setForgotEmail(e.target.value)}
-                        placeholder="e.g. rahul@cruvels.com or rahul"
+                        placeholder="e.g. employee@cruvels.com"
+                        className="w-full rounded-xl py-2 pl-10 pr-4 text-xs font-medium placeholder:text-[var(--muted)] border transition-all focus:outline-none focus:ring-2 focus:ring-[var(--teal)]"
                         style={{
-                          border: '1px solid var(--line)',
-                          background: 'var(--surface-2)',
+                          background: 'var(--paper)',
+                          borderColor: 'var(--line)',
                           color: 'var(--ink)',
-                          fontFamily: 'Archivo, sans-serif',
                         }}
-                        className="w-full rounded-xl py-2.5 pl-10 pr-4 text-xs font-medium placeholder:text-[var(--muted)] focus:outline-none focus:ring-2 focus:ring-[var(--teal)] focus:border-transparent transition-all"
                       />
                     </div>
                   </div>
 
-                  {/* Role Selection */}
-                  <div>
-                    <div className="flex items-center justify-between mb-1.5">
-                      <label className="block text-[11px] font-bold uppercase tracking-wider" style={{ color: 'var(--muted)' }}>
-                        Your Organizational Role
-                      </label>
-                      <span className="text-[10px] font-medium" style={{ color: 'var(--muted)' }}>
-                        Determines supervisory route
-                      </span>
-                    </div>
-
-                    <div className="grid grid-cols-1 gap-1.5 max-h-[190px] overflow-y-auto pr-1">
-                      {ROLE_OPTIONS.map((opt) => {
-                        const isSelected = forgotRole === opt.id;
-                        return (
-                          <button
-                            type="button"
-                            key={opt.id}
-                            onClick={() => setForgotRole(opt.id as any)}
-                            className="flex items-center justify-between p-2.5 rounded-xl border cursor-pointer transition-all w-full text-left touch-manipulation min-h-[44px]"
-                            style={{
-                              background: isSelected ? 'var(--teal-wash)' : 'var(--surface-2)',
-                              borderColor: isSelected ? 'var(--teal)' : 'var(--line-soft)',
-                            }}
-                          >
-                            <div className="flex items-center gap-2 min-w-0">
-                              <div
-                                className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full border transition-colors"
-                                style={{
-                                  background: isSelected ? 'var(--teal)' : 'transparent',
-                                  borderColor: isSelected ? 'var(--teal)' : 'var(--line)',
-                                }}
-                              >
-                                {isSelected && <Check className="h-3 w-3 text-white stroke-[3]" />}
-                              </div>
-                              <div className="truncate min-w-0">
-                                <div className="text-xs font-bold leading-tight" style={{ color: isSelected ? 'var(--teal-ink)' : 'var(--ink)' }}>
-                                  {opt.label}
-                                </div>
-                                <div className="text-[10px] truncate" style={{ color: 'var(--muted)' }}>
-                                  Escalates to: {opt.escalatesTo}
-                                </div>
-                              </div>
-                            </div>
-
-                            <span
-                              className="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded shrink-0 border"
-                              style={{
-                                background: isSelected ? 'var(--surface)' : 'var(--paper)',
-                                borderColor: 'var(--line-soft)',
-                                color: isSelected ? 'var(--teal-ink)' : 'var(--muted)',
-                              }}
-                            >
-                              {opt.badge}
-                            </span>
-                          </button>
-                        );
-                      })}
+                  <div className="space-y-1">
+                    <label
+                      htmlFor="forgotRole"
+                      className="block text-xs font-bold tracking-wide"
+                      style={{ color: 'var(--ink)' }}
+                    >
+                      Your Organizational Role
+                    </label>
+                    <div className="relative">
+                      <div
+                        className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5"
+                        style={{ color: 'var(--muted)' }}
+                      >
+                        <Users className="h-4 w-4" />
+                      </div>
+                      <select
+                        id="forgotRole"
+                        value={forgotRole}
+                        onChange={(e) => setForgotRole(e.target.value as any)}
+                        className="w-full rounded-xl py-2 pl-10 pr-4 text-xs font-medium border transition-all focus:outline-none focus:ring-2 focus:ring-[var(--teal)] cursor-pointer"
+                        style={{
+                          background: 'var(--paper)',
+                          borderColor: 'var(--line)',
+                          color: 'var(--ink)',
+                        }}
+                      >
+                        {ROLE_OPTIONS.map((opt) => (
+                          <option key={opt.id} value={opt.id}>
+                            {opt.label} ({opt.badge}) → {opt.escalatesTo}
+                          </option>
+                        ))}
+                      </select>
                     </div>
                   </div>
 
-                  {/* Optional Reason / Notes */}
-                  <div>
+                  <div className="space-y-1">
                     <label
-                      htmlFor="forgot-reason"
-                      className="block text-[11px] font-bold uppercase tracking-wider mb-1.5"
-                      style={{ color: 'var(--muted)' }}
+                      htmlFor="forgotReason"
+                      className="block text-xs font-bold tracking-wide"
+                      style={{ color: 'var(--ink)' }}
                     >
-                      Reason / Context <span className="font-normal lowercase opacity-75">(optional)</span>
+                      Reason for Reset Request <span className="font-normal text-[var(--muted)]">(Optional)</span>
                     </label>
-                    <input
-                      type="text"
-                      id="forgot-reason"
+                    <textarea
+                      id="forgotReason"
+                      rows={2}
                       value={forgotReason}
                       onChange={(e) => setForgotReason(e.target.value)}
-                      placeholder="e.g. Lost device, locked out of authenticator..."
+                      placeholder="e.g. Lost temporary credentials, locked out after vacation..."
+                      className="w-full rounded-xl p-2.5 text-xs font-medium placeholder:text-[var(--muted)] border transition-all focus:outline-none focus:ring-2 focus:ring-[var(--teal)] resize-none"
                       style={{
-                        border: '1px solid var(--line)',
-                        background: 'var(--surface-2)',
+                        background: 'var(--paper)',
+                        borderColor: 'var(--line)',
                         color: 'var(--ink)',
-                        fontFamily: 'Archivo, sans-serif',
                       }}
-                      className="w-full rounded-xl py-2 px-3 text-xs font-medium placeholder:text-[var(--muted)] focus:outline-none focus:ring-2 focus:ring-[var(--teal)] focus:border-transparent transition-all"
                     />
                   </div>
 
-                  {/* Submit Escalation Button */}
                   <button
                     type="submit"
-                    id="forgot-submit-btn"
                     disabled={forgotLoading}
                     className="glow-btn-primary w-full flex items-center justify-center gap-2 py-3 rounded-xl text-xs font-bold text-white shadow-md disabled:opacity-50 transition-all cursor-pointer mt-2"
                   >
                     {forgotLoading ? (
-                      <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                      <>
+                        <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                        <span>Dispatching Security Escalation...</span>
+                      </>
                     ) : (
                       <>
                         <Send className="h-3.5 w-3.5" />
-                        <span>Send Request to Higher Officials</span>
+                        <span>Escalate to Higher Officials</span>
                       </>
                     )}
                   </button>
@@ -927,17 +1552,6 @@ function LoginForm() {
               )}
             </div>
           )}
-
-          {/* Support footer */}
-          <div
-            className="mt-6 pt-4 text-center border-t"
-            style={{ borderColor: 'var(--line-soft)' }}
-          >
-            <p className="text-[11px] flex items-center justify-center gap-1.5" style={{ color: 'var(--muted)' }}>
-              <Shield className="h-3 w-3 text-blue-600" />
-              <span>Assistance & Emergency Access: Contact Cruvels Security Desk</span>
-            </p>
-          </div>
         </div>
 
         {/* Security Badges */}
@@ -951,15 +1565,20 @@ function LoginForm() {
           </span>
           <span>•</span>
           <span className="flex items-center gap-1">
-            <Server className="h-3.5 w-3.5" style={{ color: 'var(--teal)' }} />
-            TLS 1.3 Encrypted
+            <Smartphone className="h-3.5 w-3.5" style={{ color: 'var(--teal)' }} />
+            Device-Bound MPIN
           </span>
           <span>•</span>
           <span className="flex items-center gap-1">
-            <Building2 className="h-3.5 w-3.5" style={{ color: 'var(--teal)' }} />
-            Cruvels Enterprise
+            <Server className="h-3.5 w-3.5" style={{ color: 'var(--teal)' }} />
+            AES-256 Encrypted
           </span>
         </div>
+
+        {/* Footer Copyright */}
+        <p className="mt-4 text-center text-[11px] text-[var(--muted)]">
+          Cruvels Workplace OS • Zero-Trust Mobile Platform © 2026
+        </p>
       </div>
     </div>
   );

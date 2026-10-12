@@ -2327,6 +2327,21 @@ export class UnifiedDataStore {
       }
       this.persistToDisk();
     }
+
+    // Clean any duplicate holidays by unique date
+    const seenHolidays = new Set<string>();
+    const cleaned = this.scheduleEvents.filter((e) => {
+      if (e.event_type !== 'holiday') return true;
+      const d = e.start_time.split('T')[0];
+      if (seenHolidays.has(d)) return false;
+      seenHolidays.add(d);
+      return true;
+    });
+    if (cleaned.length !== this.scheduleEvents.length) {
+      this.scheduleEvents = cleaned;
+      this.persistToDisk();
+    }
+
     return [...this.scheduleEvents].sort((a, b) => a.start_time.localeCompare(b.start_time));
   }
 
@@ -2361,7 +2376,15 @@ export class UnifiedDataStore {
 
     for (const ev of events) {
       let existingIndex = -1;
-      if (ev.external_event_id) {
+      if (ev.event_type === 'holiday') {
+        const evDate = ev.start_time.split('T')[0];
+        existingIndex = this.scheduleEvents.findIndex(
+          (e) =>
+            e.event_type === 'holiday' &&
+            (e.start_time.startsWith(evDate) ||
+              (ev.external_event_id && e.external_event_id === ev.external_event_id))
+        );
+      } else if (ev.external_event_id) {
         existingIndex = this.scheduleEvents.findIndex(
           (e) => e.external_event_id === ev.external_event_id && e.created_by === ev.created_by
         );

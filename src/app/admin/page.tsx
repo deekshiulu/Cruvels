@@ -35,6 +35,7 @@ import Link from 'next/link';
 import AdminNavRail from '@/components/admin/AdminNavRail';
 import { AuditLog, UserRole } from '@/lib/db/types';
 import { clientCache } from '@/lib/cache/clientCache';
+import { showError } from '@/lib/utils/toast';
 
 interface AdminUserItem {
   id: string;
@@ -172,7 +173,7 @@ export default function AdminDashboardPage() {
       ]);
 
       if (statsRes.status === 403 || usersRes.status === 403) {
-        alert('Access denied. Administrator privileges required.');
+        showError('Access denied. Administrator privileges required.');
         router.push('/dashboard');
         return;
       }
