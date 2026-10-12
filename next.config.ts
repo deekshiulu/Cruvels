@@ -97,6 +97,7 @@ const nextConfig: NextConfig = {
     'dompurify',
     'sanitize-html',
     'web-push',
+    'firebase-admin',
   ],
 
   compiler: {
