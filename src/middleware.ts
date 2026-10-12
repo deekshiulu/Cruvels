@@ -78,17 +78,34 @@ function getCorsHeaders(origin: string | null): Record<string, string> {
 
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
-  const origin = req.headers.get('origin');
-  const corsHeaders = getCorsHeaders(origin);
 
-  // Handle CORS preflight OPTIONS request for all routes
+  // 1. Instantly allow all Next.js static files and assets to pass through completely untouched
+  if (
+    pathname.startsWith('/_next') ||
+    pathname.startsWith('/static') ||
+    pathname.includes('/favicon.') ||
+    pathname.match(/\.(?:svg|png|jpg|jpeg|gif|webp|ico|css|js|map|woff|woff2|ttf|eot)$/)
+  ) {
+    return NextResponse.next();
+  }
+
+  const origin = req.headers.get('origin');
+  const isApiRoute = pathname.startsWith('/api/');
+  const corsHeaders = isApiRoute ? getCorsHeaders(origin) : {};
+
+  // Handle CORS preflight OPTIONS request for API routes
   if (req.method === 'OPTIONS') {
-    return new NextResponse(null, { status: 204, headers: corsHeaders });
+    if (isApiRoute) {
+      return new NextResponse(null, { status: 204, headers: corsHeaders });
+    }
+    return NextResponse.next();
   }
 
   if (isPublicPath(pathname)) {
     const res = NextResponse.next();
-    Object.entries(corsHeaders).forEach(([k, v]) => res.headers.set(k, v));
+    if (isApiRoute) {
+      Object.entries(corsHeaders).forEach(([k, v]) => res.headers.set(k, v));
+    }
     return res;
   }
 
@@ -98,7 +115,9 @@ export async function middleware(req: NextRequest) {
     (req.headers.get('x-cruvels-warmup') === '1' || req.nextUrl.searchParams.get('_warmup') === '1')
   ) {
     const res = NextResponse.next();
-    Object.entries(corsHeaders).forEach(([k, v]) => res.headers.set(k, v));
+    if (isApiRoute) {
+      Object.entries(corsHeaders).forEach(([k, v]) => res.headers.set(k, v));
+    }
     return res;
   }
 
@@ -170,5 +189,14 @@ export async function middleware(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/((?!_next/static|_next/image).*)'],
+  matcher: [
+    /*
+     * Match all request paths except for the ones starting with:
+     * - _next/static (static files)
+     * - _next/image (image optimization files)
+     * - favicon.ico (favicon file)
+     * - static extensions (.png, .jpg, .jpeg, .svg, .ico, .webp, .css, .js)
+     */
+    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|css|js|map|woff|woff2|ttf|eot)$).*)',
+  ],
 };
