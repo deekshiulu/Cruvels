@@ -20,6 +20,7 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { Message } from '@/lib/db/types';
+import MailDeleteConfirmModal from '@/components/mail/MailDeleteConfirmModal';
 
 function DraftsContent() {
   const router = useRouter();
@@ -32,6 +33,8 @@ function DraftsContent() {
   const [loading, setLoading] = useState(true);
   const [totalPages, setTotalPages] = useState(1);
   const [total, setTotal] = useState(0);
+  const [deleteTarget, setDeleteTarget] = useState<Message | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const fetchDrafts = useCallback(async () => {
     setLoading(true);
@@ -55,15 +58,24 @@ function DraftsContent() {
     fetchDrafts();
   }, [fetchDrafts]);
 
-  const handleDeleteDraft = async (e: React.MouseEvent, id: string) => {
+  const handleDeleteDraft = (e: React.MouseEvent, msg: Message) => {
     e.stopPropagation();
-    if (!confirm('Discard this draft?')) return;
+    setDeleteTarget(msg);
+  };
+
+  const handleConfirmDeleteDraft = async () => {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    const id = deleteTarget.id;
     setMessages((prev) => prev.filter((m) => m.id !== id));
     try {
       await fetch(`/api/messages/${id}`, { method: 'DELETE' });
+      setDeleteTarget(null);
       fetchDrafts();
     } catch {
       // Revert on failure
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -262,7 +274,7 @@ function DraftsContent() {
                   </span>
 
                   <button
-                    onClick={(e) => handleDeleteDraft(e, msg.id)}
+                    onClick={(e) => handleDeleteDraft(e, msg)}
                     title="Discard Draft"
                     className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-all cursor-pointer"
                   >
@@ -274,6 +286,20 @@ function DraftsContent() {
           </div>
         )}
       </div>
+
+      {deleteTarget && (
+        <MailDeleteConfirmModal
+          isOpen={!!deleteTarget}
+          onClose={() => setDeleteTarget(null)}
+          onConfirm={handleConfirmDeleteDraft}
+          title="Discard this draft?"
+          description="Are you sure you want to discard this unsaved draft message? This cannot be undone."
+          confirmText="Discard Draft"
+          isPermanent={true}
+          subject={deleteTarget.subject || '(Untitled Draft)'}
+          loading={deleting}
+        />
+      )}
     </div>
   );
 }

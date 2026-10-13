@@ -330,19 +330,19 @@ export default function ComposePage() {
       <div className="flex items-center justify-between">
         <button
           onClick={() => router.back()}
-          className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-semibold text-slate-700 hover:text-slate-900 hover:bg-slate-50 shadow-sm transition-all cursor-pointer"
+          className="flex items-center gap-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/90 px-3.5 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-800 shadow-sm transition-all cursor-pointer"
         >
           <ArrowLeft className="h-4 w-4" />
           <span>Cancel & Discard</span>
         </button>
 
-        <h1 className="text-base font-bold text-slate-900 tracking-tight">New Message</h1>
+        <h1 className="text-base font-bold text-slate-900 dark:text-white tracking-tight">New Message</h1>
 
         <button
           type="button"
           onClick={handleSaveDraft}
           disabled={sending || success}
-          className="rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-semibold text-slate-700 hover:text-slate-900 hover:bg-slate-50 shadow-sm transition-all disabled:opacity-50 cursor-pointer"
+          className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/90 px-3.5 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-800 shadow-sm transition-all disabled:opacity-50 cursor-pointer"
         >
           Save Draft
         </button>
@@ -351,34 +351,34 @@ export default function ComposePage() {
       {/* Main Composer Panel */}
       <form
         onSubmit={handleSend}
-        className="flex-1 overflow-y-visible rounded-3xl bg-white p-6 sm:p-7 shadow-sm flex flex-col space-y-4 border border-slate-200 relative"
+        className="flex-1 overflow-y-visible rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 sm:p-7 shadow-sm flex flex-col space-y-4 relative"
       >
         {/* Error / Success Notifications */}
         {error && (
-          <div className="flex items-center gap-3 rounded-2xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700 animate-in fade-in">
+          <div className="flex items-center gap-3 rounded-2xl border border-rose-200 dark:border-rose-900/50 bg-rose-50 dark:bg-rose-950/40 p-3 text-xs text-rose-700 dark:text-rose-300 animate-in fade-in">
             <AlertCircle className="h-4 w-4 text-rose-500 shrink-0" />
             <span className="font-medium">{error}</span>
           </div>
         )}
 
         {success && (
-          <div className="flex items-center gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-800 animate-in fade-in">
+          <div className="flex items-center gap-3 rounded-2xl border border-emerald-200 dark:border-emerald-900/50 bg-emerald-50 dark:bg-emerald-950/40 p-3 text-xs text-emerald-800 dark:text-emerald-300 animate-in fade-in">
             <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
             <span className="font-medium">Action completed successfully! Redirecting...</span>
           </div>
         )}
 
         {/* Server-Locked "From" Address Bar */}
-        <div className="flex items-center justify-between rounded-2xl bg-slate-50 p-3 border border-slate-200 shadow-sm">
+        <div className="flex items-center justify-between rounded-2xl bg-slate-50 dark:bg-slate-950/70 p-3 border border-slate-200 dark:border-slate-800/80 shadow-sm">
           <div className="flex items-center gap-2.5 text-xs">
-            <span className="font-bold text-slate-500">From:</span>
-            <span className="font-bold text-slate-900">{user?.name}</span>
-            <span className="rounded-lg border border-blue-200 bg-blue-50 px-2 py-0.5 text-xs font-mono font-bold text-blue-700">
+            <span className="font-bold text-slate-500 dark:text-slate-400">From:</span>
+            <span className="font-bold text-slate-900 dark:text-white">{user?.name}</span>
+            <span className="rounded-lg border border-blue-200 dark:border-blue-800/60 bg-blue-50 dark:bg-blue-950/40 px-2 py-0.5 text-xs font-mono font-bold text-blue-700 dark:text-blue-300">
               {user?.primaryAlias || 'Resolving...'}
             </span>
           </div>
-          <div className="flex items-center gap-1.5 text-[11px] text-emerald-700 font-semibold">
-            <Lock className="h-3 w-3 text-emerald-600" />
+          <div className="flex items-center gap-1.5 text-[11px] text-emerald-700 dark:text-emerald-400 font-semibold">
+            <Lock className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
             <span>Server Locked Alias</span>
           </div>
         </div>
@@ -387,8 +387,8 @@ export default function ComposePage() {
         <div className="space-y-2 text-xs relative">
           {/* TO Field */}
           <div className="relative">
-            <div className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50/70 px-4 py-2.5 focus-within:border-blue-500 focus-within:bg-white focus-within:ring-2 focus-within:ring-blue-500/10 transition-all">
-              <span className="w-12 font-bold text-slate-500">To:</span>
+            <div className="flex items-center gap-2 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-950/70 px-4 py-2.5 focus-within:border-blue-500 dark:focus-within:border-blue-500 focus-within:bg-white dark:focus-within:bg-slate-950 focus-within:ring-2 focus-within:ring-blue-500/10 dark:focus-within:ring-blue-500/20 transition-all">
+              <span className="w-12 font-bold text-slate-500 dark:text-slate-400">To:</span>
               <input
                 type="text"
                 value={to}
@@ -399,14 +399,14 @@ export default function ComposePage() {
                 onChange={(e) => handleInputChange('to', e.target.value, setTo)}
                 onKeyDown={handleKeyDown}
                 placeholder="Type name or email address... (e.g. rahul@cruvels.com)"
-                className="flex-1 bg-transparent text-slate-900 font-medium placeholder-slate-400 focus:outline-none text-xs"
+                className="flex-1 bg-transparent text-slate-900 dark:text-slate-100 font-medium placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none text-xs"
               />
-              <div className="flex items-center gap-2 text-slate-400 font-semibold text-[11px]">
+              <div className="flex items-center gap-2 text-slate-400 dark:text-slate-400 font-semibold text-[11px]">
                 {!showCc && (
                   <button
                     type="button"
                     onClick={() => setShowCc(true)}
-                    className="hover:text-blue-600 transition-colors cursor-pointer"
+                    className="hover:text-blue-600 dark:hover:text-blue-400 transition-colors cursor-pointer"
                   >
                     CC
                   </button>
@@ -415,7 +415,7 @@ export default function ComposePage() {
                   <button
                     type="button"
                     onClick={() => setShowBcc(true)}
-                    className="hover:text-blue-600 transition-colors cursor-pointer"
+                    className="hover:text-blue-600 dark:hover:text-blue-400 transition-colors cursor-pointer"
                   >
                     BCC
                   </button>
@@ -427,8 +427,8 @@ export default function ComposePage() {
           {/* CC Field */}
           {showCc && (
             <div className="relative">
-              <div className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50/70 px-4 py-2.5 focus-within:border-blue-500 focus-within:bg-white transition-all animate-in fade-in">
-                <span className="w-12 font-bold text-slate-500">CC:</span>
+              <div className="flex items-center gap-2 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-950/70 px-4 py-2.5 focus-within:border-blue-500 dark:focus-within:border-blue-500 focus-within:bg-white dark:focus-within:bg-slate-950 focus-within:ring-2 focus-within:ring-blue-500/10 dark:focus-within:ring-blue-500/20 transition-all animate-in fade-in">
+                <span className="w-12 font-bold text-slate-500 dark:text-slate-400">CC:</span>
                 <input
                   type="text"
                   value={cc}
@@ -439,7 +439,7 @@ export default function ComposePage() {
                   onChange={(e) => handleInputChange('cc', e.target.value, setCc)}
                   onKeyDown={handleKeyDown}
                   placeholder="Comma separated CC addresses"
-                  className="flex-1 bg-transparent text-slate-900 font-medium placeholder-slate-400 focus:outline-none text-xs"
+                  className="flex-1 bg-transparent text-slate-900 dark:text-slate-100 font-medium placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none text-xs"
                 />
                 <button
                   type="button"
@@ -448,7 +448,7 @@ export default function ComposePage() {
                     setCc('');
                     if (activeField === 'cc') setActiveField(null);
                   }}
-                  className="text-slate-400 hover:text-slate-700 cursor-pointer"
+                  className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 cursor-pointer"
                 >
                   <X className="h-3.5 w-3.5" />
                 </button>
@@ -459,8 +459,8 @@ export default function ComposePage() {
           {/* BCC Field */}
           {showBcc && (
             <div className="relative">
-              <div className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50/70 px-4 py-2.5 focus-within:border-blue-500 focus-within:bg-white transition-all animate-in fade-in">
-                <span className="w-12 font-bold text-slate-500">BCC:</span>
+              <div className="flex items-center gap-2 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-950/70 px-4 py-2.5 focus-within:border-blue-500 dark:focus-within:border-blue-500 focus-within:bg-white dark:focus-within:bg-slate-950 focus-within:ring-2 focus-within:ring-blue-500/10 dark:focus-within:ring-blue-500/20 transition-all animate-in fade-in">
+                <span className="w-12 font-bold text-slate-500 dark:text-slate-400">BCC:</span>
                 <input
                   type="text"
                   value={bcc}
@@ -471,7 +471,7 @@ export default function ComposePage() {
                   onChange={(e) => handleInputChange('bcc', e.target.value, setBcc)}
                   onKeyDown={handleKeyDown}
                   placeholder="Comma separated BCC addresses"
-                  className="flex-1 bg-transparent text-slate-900 font-medium placeholder-slate-400 focus:outline-none text-xs"
+                  className="flex-1 bg-transparent text-slate-900 dark:text-slate-100 font-medium placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none text-xs"
                 />
                 <button
                   type="button"
@@ -480,7 +480,7 @@ export default function ComposePage() {
                     setBcc('');
                     if (activeField === 'bcc') setActiveField(null);
                   }}
-                  className="text-slate-400 hover:text-slate-700 cursor-pointer"
+                  className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 cursor-pointer"
                 >
                   <X className="h-3.5 w-3.5" />
                 </button>
@@ -492,11 +492,11 @@ export default function ComposePage() {
           {activeField && filteredSuggestions.length > 0 && (
             <div
               ref={dropdownRef}
-              className="absolute left-0 right-0 z-50 mt-1 max-h-72 overflow-y-auto rounded-2xl bg-white border border-slate-200 shadow-xl divide-y divide-slate-100 animate-in fade-in slide-in-from-top-1"
+              className="absolute left-0 right-0 z-50 mt-1 max-h-72 overflow-y-auto rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl divide-y divide-slate-100 dark:divide-slate-800/80 animate-in fade-in slide-in-from-top-1"
             >
-              <div className="px-3.5 py-1.5 bg-slate-50/80 text-[10px] font-bold uppercase tracking-wider text-slate-400 flex items-center justify-between">
+              <div className="px-3.5 py-1.5 bg-slate-50/80 dark:bg-slate-950/80 text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 flex items-center justify-between">
                 <span>Suggested Contacts & Colleagues</span>
-                <span className="text-[9px] font-medium text-slate-400">Press ↵ or Tab to select</span>
+                <span className="text-[9px] font-medium text-slate-400 dark:text-slate-500">Press ↵ or Tab to select</span>
               </div>
               {filteredSuggestions.map((contact, idx) => {
                 const isSelected = idx === highlightedIndex;
@@ -516,7 +516,7 @@ export default function ComposePage() {
                     }}
                     onMouseEnter={() => setHighlightedIndex(idx)}
                     className={`flex items-center justify-between gap-3 px-3.5 py-2.5 cursor-pointer transition-colors ${
-                      isSelected ? 'bg-blue-50/80' : 'hover:bg-slate-50'
+                      isSelected ? 'bg-blue-50/80 dark:bg-blue-950/50' : 'hover:bg-slate-50 dark:hover:bg-slate-800/60'
                     }`}
                   >
                     <div className="flex items-center gap-3 min-w-0">
@@ -525,7 +525,7 @@ export default function ComposePage() {
                         className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-[11px] font-bold ${
                           contact.isCompany
                             ? 'bg-blue-600 text-white shadow-2xs'
-                            : 'bg-slate-200 text-slate-700'
+                            : 'bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300'
                         }`}
                       >
                         {initials || <User className="h-4 w-4" />}
@@ -533,21 +533,21 @@ export default function ComposePage() {
 
                       {/* Name & Email */}
                       <div className="min-w-0">
-                        <div className="flex items-center gap-1.5 font-bold text-slate-900 text-xs truncate">
+                        <div className="flex items-center gap-1.5 font-bold text-slate-900 dark:text-white text-xs truncate">
                           <span>{contact.name}</span>
                           {contact.isCompany && (
-                            <span className="rounded bg-blue-100 px-1.5 py-0.2 text-[9px] font-bold text-blue-700">
+                            <span className="rounded bg-blue-100 dark:bg-blue-950/80 px-1.5 py-0.2 text-[9px] font-bold text-blue-700 dark:text-blue-300 border border-transparent dark:border-blue-800/50">
                               Cruvels
                             </span>
                           )}
                           {contact.frequency > 3 && (
-                            <span className="flex items-center gap-0.5 text-[9px] font-semibold text-amber-600 bg-amber-50 px-1 py-0.2 rounded border border-amber-200">
+                            <span className="flex items-center gap-0.5 text-[9px] font-semibold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/50 px-1 py-0.2 rounded border border-amber-200 dark:border-amber-800/50">
                               <Sparkles className="h-2.5 w-2.5 text-amber-500" />
                               Frequent
                             </span>
                           )}
                         </div>
-                        <div className="text-[11px] font-mono text-slate-500 truncate mt-0.5">
+                        <div className="text-[11px] font-mono text-slate-500 dark:text-slate-400 truncate mt-0.5">
                           {contact.email}
                         </div>
                       </div>
@@ -556,12 +556,12 @@ export default function ComposePage() {
                     {/* Department / Designation */}
                     <div className="text-right shrink-0">
                       {contact.designation && (
-                        <div className="text-[11px] font-medium text-slate-600 truncate max-w-[140px]">
+                        <div className="text-[11px] font-medium text-slate-600 dark:text-slate-300 truncate max-w-[140px]">
                           {contact.designation}
                         </div>
                       )}
                       {contact.department && (
-                        <div className="text-[10px] text-slate-400 truncate max-w-[140px]">
+                        <div className="text-[10px] text-slate-400 dark:text-slate-500 truncate max-w-[140px]">
                           {contact.department}
                         </div>
                       )}
@@ -573,14 +573,14 @@ export default function ComposePage() {
           )}
 
           {/* Subject Field */}
-          <div className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50/70 px-4 py-2.5 focus-within:border-blue-500 focus-within:bg-white transition-all">
-            <span className="w-12 font-bold text-slate-500">Subject:</span>
+          <div className="flex items-center gap-2 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-950/70 px-4 py-2.5 focus-within:border-blue-500 dark:focus-within:border-blue-500 focus-within:bg-white dark:focus-within:bg-slate-950 focus-within:ring-2 focus-within:ring-blue-500/10 dark:focus-within:ring-blue-500/20 transition-all">
+            <span className="w-12 font-bold text-slate-500 dark:text-slate-400">Subject:</span>
             <input
               type="text"
               value={subject}
               onChange={(e) => setSubject(e.target.value)}
               placeholder="Email subject..."
-              className="flex-1 bg-transparent text-slate-900 font-semibold placeholder-slate-400 focus:outline-none text-xs"
+              className="flex-1 bg-transparent text-slate-900 dark:text-slate-100 font-semibold placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none text-xs"
             />
           </div>
         </div>
@@ -593,29 +593,29 @@ export default function ComposePage() {
             value={bodyText}
             onChange={(e) => setBodyText(e.target.value)}
             placeholder="Type your message here..."
-            className="w-full h-full rounded-2xl border border-slate-200 bg-slate-50/60 p-4 text-xs font-medium text-slate-900 placeholder-slate-400 focus:border-blue-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/10 transition-all leading-relaxed"
+            className="w-full h-full rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-950/70 p-4 text-xs font-medium text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:border-blue-500 dark:focus:border-blue-500 focus:bg-white dark:focus:bg-slate-950 focus:outline-none focus:ring-2 focus:ring-blue-500/10 dark:focus:ring-blue-500/20 transition-all leading-relaxed"
           />
         </div>
 
         {/* Staged Attachments */}
         {attachments.length > 0 && (
           <div className="space-y-2">
-            <div className="text-xs font-bold text-slate-600">Attached Files:</div>
+            <div className="text-xs font-bold text-slate-600 dark:text-slate-400">Attached Files:</div>
             <div className="flex flex-wrap gap-2">
               {attachments.map((att, index) => (
                 <div
                   key={index}
-                  className="flex items-center gap-2 rounded-xl bg-slate-100 px-3 py-1.5 text-xs text-slate-900 border border-slate-200 shadow-sm"
+                  className="flex items-center gap-2 rounded-xl bg-slate-100 dark:bg-slate-800/80 px-3 py-1.5 text-xs text-slate-900 dark:text-slate-200 border border-slate-200 dark:border-slate-700/80 shadow-sm"
                 >
-                  <Paperclip className="h-3.5 w-3.5 text-blue-600" />
+                  <Paperclip className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
                   <span className="truncate max-w-[200px] font-medium">{att.filename}</span>
-                  <span className="text-[10px] text-slate-500 font-mono">
+                  <span className="text-[10px] text-slate-500 dark:text-slate-400 font-mono">
                     ({Math.round(att.size / 1024)} KB)
                   </span>
                   <button
                     type="button"
                     onClick={() => removeAttachment(index)}
-                    className="text-slate-400 hover:text-rose-600 ml-1 cursor-pointer"
+                    className="text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 ml-1 cursor-pointer"
                   >
                     <X className="h-3.5 w-3.5" />
                   </button>
@@ -626,9 +626,9 @@ export default function ComposePage() {
         )}
 
         {/* Bottom Actions Bar */}
-        <div className="flex items-center justify-between border-t border-slate-100 pt-4">
-          <label className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-semibold text-slate-700 hover:text-slate-900 hover:bg-slate-50 cursor-pointer shadow-sm transition-all">
-            <Paperclip className="h-4 w-4 text-blue-600" />
+        <div className="flex items-center justify-between border-t border-slate-100 dark:border-slate-800/80 pt-4">
+          <label className="flex items-center gap-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-3.5 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-800/80 cursor-pointer shadow-sm transition-all">
+            <Paperclip className="h-4 w-4 text-blue-600 dark:text-blue-400" />
             <span>Attach Files (Max 25MB)</span>
             <input
               type="file"
@@ -643,7 +643,7 @@ export default function ComposePage() {
               type="button"
               onClick={handleSaveDraft}
               disabled={sending || success}
-              className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-bold text-slate-700 hover:text-slate-900 hover:bg-slate-50 shadow-sm transition-all disabled:opacity-50 cursor-pointer"
+              className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-4 py-2.5 text-xs font-bold text-slate-700 dark:text-slate-200 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-800/80 shadow-sm transition-all disabled:opacity-50 cursor-pointer"
             >
               Save as Draft
             </button>

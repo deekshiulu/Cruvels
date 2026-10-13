@@ -36,6 +36,7 @@ import DOMPurify from 'dompurify';
 import AppShell from '@/components/layout/AppShell';
 import MailNavRail from '@/components/mail/MailNavRail';
 import MailReminderModal from '@/components/mail/MailReminderModal';
+import MailDeleteConfirmModal from '@/components/mail/MailDeleteConfirmModal';
 import { showError, showSuccess } from '@/lib/utils/toast';
 
 interface SafeAttachmentItem {
@@ -70,6 +71,10 @@ export default function MessageDetailPage({
   const [reminderNotification, setReminderNotification] = useState<string | null>(null);
   const [addingToSchedule, setAddingToSchedule] = useState(false);
   const [scheduleSuccess, setScheduleSuccess] = useState<string | null>(null);
+
+  // Custom Deletion Confirmation State
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   // Reply State
   const [showReplyBox, setShowReplyBox] = useState(false);
@@ -137,14 +142,26 @@ export default function MessageDetailPage({
     });
   };
 
-  const handleDelete = async () => {
-    if (!confirm('Move this message to trash?')) return;
+  const handleDelete = () => {
+    setShowDeleteModal(true);
+  };
+
+  const handleConfirmDelete = async () => {
+    setDeleting(true);
     try {
-      await fetch(`/api/messages/${id}`, { method: 'DELETE' });
-      showSuccess('Message moved to trash.');
-      router.push('/mail/inbox');
+      const res = await fetch(`/api/messages/${id}`, { method: 'DELETE' });
+      if (res.ok) {
+        clientCache.invalidate('inbox');
+        showSuccess('Message moved to trash.');
+        setShowDeleteModal(false);
+        router.push('/mail/inbox');
+      } else {
+        showError('Failed to delete message.');
+      }
     } catch {
       showError('Failed to delete message.');
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -900,6 +917,20 @@ export default function MessageDetailPage({
             );
             setTimeout(() => setReminderNotification(null), 6000);
           }}
+        />
+      )}
+
+      {showDeleteModal && (
+        <MailDeleteConfirmModal
+          isOpen={showDeleteModal}
+          onClose={() => setShowDeleteModal(false)}
+          onConfirm={handleConfirmDelete}
+          title="Move this message to trash?"
+          description="This conversation will be moved to the Trash folder. You can recover it anytime within 30 days."
+          confirmText="Move to Trash"
+          subject={message?.subject}
+          sender={message?.from_name ? `${message.from_name} <${message.from_address}>` : message?.from_address}
+          loading={deleting}
         />
       )}
     </AppShell>

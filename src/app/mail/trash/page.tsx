@@ -20,6 +20,7 @@ import {
 import { Message } from '@/lib/db/types';
 import { clientCache } from '@/lib/cache/clientCache';
 import { showSuccess, showError } from '@/lib/utils/toast';
+import MailDeleteConfirmModal from '@/components/mail/MailDeleteConfirmModal';
 
 function TrashContent() {
   const router = useRouter();
@@ -33,6 +34,8 @@ function TrashContent() {
   const [totalPages, setTotalPages] = useState(1);
   const [total, setTotal] = useState(0);
   const [notification, setNotification] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Message | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const fetchTrash = useCallback(async () => {
     try {
@@ -77,9 +80,15 @@ function TrashContent() {
     }
   };
 
-  const handlePermanentDelete = async (e: React.MouseEvent, msgId: string) => {
+  const handlePermanentDelete = (e: React.MouseEvent, msg: Message) => {
     e.stopPropagation();
-    if (!confirm('Permanently delete this email? This action cannot be undone.')) return;
+    setDeleteTarget(msg);
+  };
+
+  const handleConfirmPermanentDelete = async () => {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    const msgId = deleteTarget.id;
     try {
       const res = await fetch(`/api/mail/trash?messageId=${encodeURIComponent(msgId)}`, {
         method: 'DELETE',
@@ -89,10 +98,15 @@ function TrashContent() {
         setTotal((prev) => Math.max(0, prev - 1));
         showSuccess('Message permanently removed.');
         setNotification('Message permanently removed.');
+        setDeleteTarget(null);
         setTimeout(() => setNotification(null), 4000);
+      } else {
+        showError('Failed to delete message.');
       }
     } catch {
       showError('Failed to delete message.');
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -290,7 +304,7 @@ function TrashContent() {
                     </button>
 
                     <button
-                      onClick={(e) => handlePermanentDelete(e, msg.id)}
+                      onClick={(e) => handlePermanentDelete(e, msg)}
                       title="Permanently Delete"
                       className="rounded-lg p-1 text-slate-400 hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-950/40 transition-all cursor-pointer"
                     >
@@ -303,6 +317,21 @@ function TrashContent() {
           </div>
         )}
       </div>
+
+      {deleteTarget && (
+        <MailDeleteConfirmModal
+          isOpen={!!deleteTarget}
+          onClose={() => setDeleteTarget(null)}
+          onConfirm={handleConfirmPermanentDelete}
+          title="Permanently delete this email?"
+          description="This action cannot be undone. This message will be permanently purged from your mailbox."
+          confirmText="Delete Permanently"
+          isPermanent={true}
+          subject={deleteTarget.subject}
+          sender={deleteTarget.from_name ? `${deleteTarget.from_name} <${deleteTarget.from_address}>` : deleteTarget.from_address}
+          loading={deleting}
+        />
+      )}
     </div>
   );
 }
