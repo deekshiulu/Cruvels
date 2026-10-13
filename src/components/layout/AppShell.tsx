@@ -441,6 +441,24 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             setNotifUnreadCount((c) => c + 1);
             playNotificationSound();
 
+            // ⚡ Instant In-App Popup Toast Banner for Foreground App Viewers
+            setToastMessage({
+              type: 'info',
+              message: `${incoming.type === 'mail' ? '📬 ' : '🔔 '}${incoming.title} — ${incoming.message}`,
+            });
+            setTimeout(() => {
+              setToastMessage((curr) => (curr?.message.includes(incoming.title) ? null : curr));
+            }, 6000);
+
+            // Inform Flutter wrapper if active
+            try {
+              if (typeof window !== 'undefined' && (window as any).flutter_inappwebview?.callHandler) {
+                (window as any).flutter_inappwebview.callHandler('onNotification', incoming);
+              } else if (typeof window !== 'undefined' && (window as any).FlutterChannel?.postMessage) {
+                (window as any).FlutterChannel.postMessage(JSON.stringify(incoming));
+              }
+            } catch {}
+
             if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
               try {
                 if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {

@@ -15,14 +15,22 @@ const SubscribeSchema = z.object({
 
 export async function POST(req: NextRequest) {
   try {
-    const user = await requireActiveUser(req);
+    const session = await getAuthenticatedSession(req);
     const body = await req.json();
 
     // ⚡ Direct FCM Device Token Registration from Flutter Mobile App
     if (body.fcmToken && typeof body.fcmToken === 'string') {
-      await dataStore.saveUserFcmToken(user.id, body.fcmToken.trim());
+      const targetUserId = session?.id || (typeof body.userId === 'string' ? body.userId : null);
+      if (!targetUserId) {
+        return NextResponse.json(
+          { error: 'Authentication or valid userId is required to link device token.', success: false },
+          { status: 401 }
+        );
+      }
+
+      await dataStore.saveUserFcmToken(targetUserId, body.fcmToken.trim());
       await logAuditEvent({
-        userId: user.id,
+        userId: targetUserId,
         action: 'DEVICE_NOTIFICATIONS_LINKED',
         resourceType: 'FCM_TOKEN',
         metadata: { device: body.deviceName || 'Mobile App' },
@@ -31,8 +39,17 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({
         success: true,
         message: 'Mobile device registered for instant push notifications.',
+        userId: targetUserId,
       });
     }
+
+    if (!session || session.status !== 'active') {
+      return NextResponse.json(
+        { error: 'Authentication required. Please log in.', success: false },
+        { status: 401 }
+      );
+    }
+    const user = session;
 
     const parsed = SubscribeSchema.safeParse(body);
     if (!parsed.success) {
