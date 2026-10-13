@@ -1920,7 +1920,7 @@ export default function AttendancePage() {
                   <button
                     type="button"
                     disabled={syncing}
-                    onClick={() => handleTriggerSync(false)}
+                    onClick={() => handleTriggerSync()}
                     className="text-xs font-bold flex items-center gap-1 cursor-pointer disabled:opacity-50"
                     style={{ color: 'var(--teal)' }}
                   >
