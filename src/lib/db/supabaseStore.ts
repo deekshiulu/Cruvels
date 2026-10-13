@@ -1439,11 +1439,31 @@ export class SupabaseDataStore {
     }
   }
 
+  public async getUserCalendarIntegration(userId: string, provider: 'google' | 'microsoft'): Promise<UserCalendarIntegration | null> {
+    try {
+      const { data, error } = await db()
+        .from('user_calendar_integrations')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('provider', provider)
+        .eq('is_active', true)
+        .maybeSingle();
+      if (error || !data) return null;
+      return data as UserCalendarIntegration;
+    } catch {
+      return null;
+    }
+  }
+
   public async saveUserCalendarIntegration(data: {
     userId: string;
     provider: 'google' | 'microsoft';
     accountEmail?: string;
     feedUrl?: string;
+    accessToken?: string;
+    refreshToken?: string;
+    expiresAt?: number;
+    scope?: string;
   }): Promise<UserCalendarIntegration> {
     const now = new Date().toISOString();
     const row = {
@@ -1452,6 +1472,10 @@ export class SupabaseDataStore {
       provider: data.provider,
       account_email: data.accountEmail || null,
       feed_url: data.feedUrl || null,
+      access_token: data.accessToken || null,
+      refresh_token: data.refreshToken || null,
+      expires_at: data.expiresAt || null,
+      scope: data.scope || null,
       is_active: true,
       created_at: now,
       updated_at: now,

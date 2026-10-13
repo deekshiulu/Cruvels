@@ -518,6 +518,10 @@ export interface UserCalendarIntegration {
   provider: 'google' | 'microsoft';
   account_email?: string;
   feed_url?: string;
+  access_token?: string;
+  refresh_token?: string;
+  expires_at?: number; // expiration timestamp in epoch milliseconds
+  scope?: string;
   is_active: boolean;
   last_synced_at?: string;
   sync_error?: string;

@@ -2428,11 +2428,20 @@ export class UnifiedDataStore {
     return this.userCalendarIntegrations.filter((i) => i.user_id === userId);
   }
 
+  public async getUserCalendarIntegration(userId: string, provider: 'google' | 'microsoft'): Promise<UserCalendarIntegration | null> {
+    const found = this.userCalendarIntegrations.find((i) => i.user_id === userId && i.provider === provider && i.is_active);
+    return found ? { ...found } : null;
+  }
+
   public async saveUserCalendarIntegration(data: {
     userId: string;
     provider: 'google' | 'microsoft';
     accountEmail?: string;
     feedUrl?: string;
+    accessToken?: string;
+    refreshToken?: string;
+    expiresAt?: number;
+    scope?: string;
   }): Promise<UserCalendarIntegration> {
     const existingIndex = this.userCalendarIntegrations.findIndex(
       (i) => i.user_id === data.userId && i.provider === data.provider && (data.feedUrl ? i.feed_url === data.feedUrl : true)
@@ -2445,6 +2454,10 @@ export class UnifiedDataStore {
         ...existing,
         account_email: data.accountEmail || existing.account_email,
         feed_url: data.feedUrl || existing.feed_url,
+        access_token: data.accessToken !== undefined ? data.accessToken : existing.access_token,
+        refresh_token: data.refreshToken !== undefined ? data.refreshToken : existing.refresh_token,
+        expires_at: data.expiresAt !== undefined ? data.expiresAt : existing.expires_at,
+        scope: data.scope || existing.scope,
         is_active: true,
         updated_at: now,
       };
@@ -2459,6 +2472,10 @@ export class UnifiedDataStore {
       provider: data.provider,
       account_email: data.accountEmail,
       feed_url: data.feedUrl,
+      access_token: data.accessToken,
+      refresh_token: data.refreshToken,
+      expires_at: data.expiresAt,
+      scope: data.scope,
       is_active: true,
       created_at: now,
       updated_at: now,

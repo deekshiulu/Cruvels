@@ -208,6 +208,22 @@ export default function SchedulePage() {
 
   useEffect(() => {
     fetchSchedule();
+
+    // Detect OAuth redirect callback status
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const synced = params.get('synced');
+      const err = params.get('error');
+
+      if (synced === 'google') {
+        setNotification('🎉 Google Calendar connected & synchronized successfully!');
+        window.history.replaceState({}, '', window.location.pathname);
+        setTimeout(() => setNotification(null), 5000);
+      } else if (err) {
+        setError(`Calendar connection notice: ${decodeURIComponent(err)}`);
+        window.history.replaceState({}, '', window.location.pathname);
+      }
+    }
   }, []);
 
   /* sync */
@@ -218,15 +234,23 @@ export default function SchedulePage() {
       const res = await fetch('/api/calendar/sync', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sample: true }),
       });
       const d = await res.json();
+
+      // IF NOT LINKED: Redirect top-level to Google OAuth consent
+      if (res.status === 401 && d.requires_auth && d.auth_url) {
+        setNotification('Redirecting to Google Calendar authorization...');
+        // Top-level redirect safe for Flutter WebView & browser
+        window.location.href = d.auth_url;
+        return;
+      }
+
       if (res.ok && d.success) {
         setNotification(d.message || 'Google Calendar synced successfully!');
-        fetchSchedule();
-        setTimeout(() => setNotification(null), 3500);
+        await fetchSchedule();
+        setTimeout(() => setNotification(null), 4000);
       } else {
-        setError(d.error || 'Calendar sync failed.');
+        setError(d.error || d.message || 'Calendar sync failed.');
       }
     } catch {
       setError('Network connection error during sync.');
@@ -557,6 +581,18 @@ export default function SchedulePage() {
           </div>
         )}
 
+        {error && (
+          <div className="flex items-center justify-between gap-2.5 rounded-xl px-4 py-3 text-xs bg-red-500/10 border border-red-500/30 text-red-600 dark:text-red-400 font-semibold animate-in fade-in slide-in-from-top-2 duration-200 min-w-0 max-w-full">
+            <div className="flex items-center gap-2 min-w-0 flex-1">
+              <AlertCircle className="h-4 w-4 shrink-0 text-red-600 dark:text-red-400" />
+              <span className="break-words min-w-0 flex-1">{error}</span>
+            </div>
+            <button onClick={() => setError(null)} className="shrink-0 text-red-500 hover:text-red-700">
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        )}
+
         {creationWarnings.length > 0 && (
           <div className="p-3.5 rounded-xl text-xs bg-amber-500/10 border border-amber-500/30 text-amber-600 dark:text-amber-400 space-y-1 animate-in fade-in min-w-0 max-w-full">
             <div className="flex items-center gap-1.5 font-bold">
@@ -643,8 +679,10 @@ export default function SchedulePage() {
 
           {/* Card 4: Google Workspace Live Sync */}
           <div
-            className="p-3.5 rounded-2xl border transition-all hover:border-emerald-500/40 relative overflow-hidden group min-w-0"
+            onClick={handleSync}
+            className="p-3.5 rounded-2xl border transition-all hover:border-emerald-500/40 relative overflow-hidden group min-w-0 cursor-pointer active:scale-[0.99]"
             style={{ background: 'var(--surface)', borderColor: 'var(--line)' }}
+            title="Click to synchronize Google Calendar"
           >
             <div className="absolute -right-3 -bottom-3 w-16 h-16 rounded-full bg-emerald-500/5 blur-xl pointer-events-none group-hover:bg-emerald-500/10 transition-colors" />
             <div className="flex items-center justify-between mb-1.5 min-w-0 gap-1">

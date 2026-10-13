@@ -2,14 +2,21 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireActiveUser, handleApiError } from '@/lib/security/authorization';
 import { dataStore } from '@/lib/db/store';
 import { checkRateLimit } from '@/lib/security/rate-limit';
-import { syncCalendarIntegration, syncSampleCalendars, syncGoogleHolidays } from '@/lib/calendar/sync-service';
+import { syncCalendarIntegration, syncGoogleHolidays } from '@/lib/calendar/sync-service';
+import {
+  buildGoogleAuthUrl,
+  resolveRedirectUri,
+  refreshGoogleAccessToken,
+  fetchGoogleCalendarEvents,
+  mapGoogleItemsToScheduleEvents,
+} from '@/lib/calendar/google-oauth';
 
 export async function POST(req: NextRequest) {
   try {
     const user = await requireActiveUser(req);
 
-    // Rate limiting: 6 sync requests per minute per user
-    const rateCheck = await checkRateLimit(`cal_sync:${user.id}`, 6, 60);
+    // Rate limiting: 10 sync requests per minute per user
+    const rateCheck = await checkRateLimit(`cal_sync:${user.id}`, 10, 60);
     if (!rateCheck.allowed) {
       return NextResponse.json(
         { error: 'Calendar sync requests are throttled. Please wait a few moments.', success: false },
@@ -24,60 +31,136 @@ export async function POST(req: NextRequest) {
       // Empty body is acceptable
     }
 
-    // Check if dedicated Google Calendar holidays sync was requested
-    if (body?.action === 'sync_holidays') {
-      const holidayResult = await syncGoogleHolidays(user.id);
-      return NextResponse.json({
-        success: true,
-        message: `Google Calendar Public Holidays synced! Total: ${holidayResult.totalHolidays} holidays (${holidayResult.added} added, ${holidayResult.updated} updated).`,
-        added: holidayResult.added,
-        updated: holidayResult.updated,
-        totalHolidays: holidayResult.totalHolidays,
-      });
+    // 1. Check if user has connected Google Calendar via OAuth2
+    const googleIntegration = await dataStore.getUserCalendarIntegration(user.id, 'google');
+
+    // =========================================================================
+    // IF NOT LINKED: Return 401 Unauthorized with requires_auth flag & OAuth URL
+    // =========================================================================
+    if (!googleIntegration || (!googleIntegration.access_token && !googleIntegration.refresh_token)) {
+      const redirectUri = resolveRedirectUri(req);
+      const authUrl = buildGoogleAuthUrl(user.id, redirectUri);
+
+      return NextResponse.json(
+        {
+          success: false,
+          requires_auth: true,
+          provider: 'google',
+          auth_url: authUrl,
+          message: 'Google Calendar is not linked. Please authorize access to sync your live meetings.',
+        },
+        { status: 401 }
+      );
     }
 
-    // Check if sample demo sync is requested
-    if (body?.sample) {
-      const result = await syncSampleCalendars(user.id, undefined, { includeHolidays: true });
-      return NextResponse.json({
-        success: true,
-        message: `Google Calendar meetings & official public holidays synced! Added: ${result.added}, Updated: ${result.updated}`,
-        added: result.added,
-        updated: result.updated,
-      });
+    // =========================================================================
+    // IF LINKED: Check token validity, auto-refresh if expired, & fetch real events
+    // =========================================================================
+    let accessToken = googleIntegration.access_token;
+    const isExpired = googleIntegration.expires_at
+      ? Date.now() >= googleIntegration.expires_at - 60000 // Refresh if within 1 min of expiry
+      : !accessToken;
+
+    if (isExpired) {
+      if (!googleIntegration.refresh_token) {
+        // Refresh token missing, re-prompt consent
+        const redirectUri = resolveRedirectUri(req);
+        const authUrl = buildGoogleAuthUrl(user.id, redirectUri);
+        return NextResponse.json(
+          {
+            success: false,
+            requires_auth: true,
+            provider: 'google',
+            auth_url: authUrl,
+            message: 'Your Google Calendar session has expired. Please re-authenticate.',
+          },
+          { status: 401 }
+        );
+      }
+
+      try {
+        const refreshed = await refreshGoogleAccessToken(googleIntegration.refresh_token);
+        accessToken = refreshed.access_token;
+        const newExpiresAt = Date.now() + (refreshed.expires_in || 3600) * 1000;
+
+        await dataStore.saveUserCalendarIntegration({
+          userId: user.id,
+          provider: 'google',
+          accountEmail: googleIntegration.account_email,
+          accessToken,
+          refreshToken: googleIntegration.refresh_token,
+          expiresAt: newExpiresAt,
+          scope: googleIntegration.scope,
+        });
+      } catch (refreshErr: any) {
+        console.error('[Google Token Refresh Error]:', refreshErr);
+        const redirectUri = resolveRedirectUri(req);
+        const authUrl = buildGoogleAuthUrl(user.id, redirectUri);
+        return NextResponse.json(
+          {
+            success: false,
+            requires_auth: true,
+            provider: 'google',
+            auth_url: authUrl,
+            error: 'Failed to refresh Google Calendar credentials. Please re-authenticate.',
+          },
+          { status: 401 }
+        );
+      }
     }
 
-    const integrations = await dataStore.getUserCalendarIntegrations(user.id);
-    if (integrations.length === 0) {
-      const holidayResult = await syncGoogleHolidays(user.id);
-      return NextResponse.json({
-        success: true,
-        message: `Official public holidays synced (${holidayResult.totalHolidays} holidays). Connect your Google Calendar or Microsoft Teams iCal URL below to sync your team meetings.`,
-        added: holidayResult.added,
-        updated: holidayResult.updated,
-      });
+    if (!accessToken) {
+      const redirectUri = resolveRedirectUri(req);
+      return NextResponse.json(
+        {
+          success: false,
+          requires_auth: true,
+          provider: 'google',
+          auth_url: buildGoogleAuthUrl(user.id, redirectUri),
+        },
+        { status: 401 }
+      );
     }
 
-    let totalFetched = 0;
-    let totalAdded = 0;
-    let totalUpdated = 0;
-    const results = [];
+    // 2. Fetch real live Google Calendar meetings & events
+    const rawEvents = await fetchGoogleCalendarEvents(accessToken);
+    const liveScheduleEvents = mapGoogleItemsToScheduleEvents(
+      rawEvents,
+      user.id,
+      googleIntegration.account_email
+    );
 
-    for (const integration of integrations) {
-      const res = await syncCalendarIntegration(integration, user.id);
-      results.push(res);
-      totalFetched += res.totalFetched;
-      totalAdded += res.added;
-      totalUpdated += res.updated;
+    // 3. Upsert real events into portal schedule
+    let addedCount = 0;
+    let updatedCount = 0;
+    if (liveScheduleEvents.length > 0) {
+      const upsertResult = await dataStore.upsertScheduleEvents(liveScheduleEvents);
+      addedCount = upsertResult.added;
+      updatedCount = upsertResult.updated;
     }
+
+    // 4. Also synchronize official public holidays
+    const holidayResult = await syncGoogleHolidays(user.id);
+
+    // 5. Update last_synced_at timestamp on the integration
+    await dataStore.saveUserCalendarIntegration({
+      userId: user.id,
+      provider: 'google',
+      accountEmail: googleIntegration.account_email,
+      accessToken,
+      refreshToken: googleIntegration.refresh_token,
+      expiresAt: googleIntegration.expires_at,
+    });
 
     return NextResponse.json({
       success: true,
-      message: `Calendar synchronization completed. ${totalFetched} events evaluated (${totalAdded} added, ${totalUpdated} updated).`,
-      results,
-      totalFetched,
-      totalAdded,
-      totalUpdated,
+      provider: 'google',
+      accountEmail: googleIntegration.account_email,
+      message: `Google Calendar synchronized successfully! ${liveScheduleEvents.length} live meetings and ${holidayResult.totalHolidays} public holidays synced.`,
+      eventsCount: liveScheduleEvents.length,
+      holidaysCount: holidayResult.totalHolidays,
+      added: addedCount,
+      updated: updatedCount,
     });
   } catch (err) {
     return handleApiError(err);

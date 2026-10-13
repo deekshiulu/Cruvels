@@ -37,6 +37,7 @@ next-env.d.ts
 # Scratch & Auth tokens
 admin_cookie.txt
 test
+CruvelsPortal.json
 
 # Local JSON store (never commit runtime data)
 /data/*.json
