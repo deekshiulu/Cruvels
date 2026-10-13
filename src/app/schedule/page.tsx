@@ -476,18 +476,18 @@ export default function SchedulePage() {
 
   return (
     <AppShell>
-      <div className="flex flex-col h-full gap-4 max-w-7xl mx-auto w-full pb-8" style={{ color: 'var(--ink)' }}>
+      <div className="flex flex-col h-full gap-4 max-w-7xl mx-auto w-full pb-8 min-w-0 max-w-full overflow-x-hidden" style={{ color: 'var(--ink)' }}>
         
         {/* TOP HERO HEADER */}
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pb-3 border-b border-[var(--line)] min-w-0">
-          <div className="min-w-0 flex-1">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pb-3 border-b border-[var(--line)] min-w-0 max-w-full">
+          <div className="min-w-0 flex-1 w-full sm:w-auto">
             <div className="flex items-center gap-2.5 min-w-0">
               <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-blue-500/10 border border-blue-500/20 text-blue-600 dark:text-blue-400 shadow-xs">
                 <CalendarIcon className="h-5 w-5" />
               </div>
               <div className="min-w-0 flex-1">
                 <h1
-                  className="text-lg sm:text-xl font-bold tracking-tight flex flex-wrap items-center gap-2"
+                  className="text-lg sm:text-xl font-bold tracking-tight flex flex-wrap items-center gap-2 min-w-0"
                   style={{ fontFamily: 'Bricolage Grotesque, sans-serif', color: 'var(--ink)' }}
                 >
                   <span className="truncate">Calendar & Operational Agenda</span>
@@ -495,7 +495,7 @@ export default function SchedulePage() {
                     <ShieldCheck className="h-3 w-3" /> Live Operations
                   </span>
                 </h1>
-                <p className="text-xs text-[var(--muted)] truncate sm:text-clip">
+                <p className="text-xs text-[var(--muted)] break-words leading-relaxed">
                   Google Workspace sync, Indian gazetted holidays, and instant video conference launches.
                 </p>
               </div>
@@ -527,14 +527,14 @@ export default function SchedulePage() {
 
         {/* OFFLINE RESILIENCE BANNER */}
         {isOffline && (
-          <div className="flex items-center justify-between gap-3 p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-700 dark:text-amber-400 text-xs animate-in fade-in slide-in-from-top-1">
-            <div className="flex items-center gap-2.5 min-w-0">
+          <div className="flex items-center justify-between gap-3 p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-700 dark:text-amber-400 text-xs animate-in fade-in slide-in-from-top-1 min-w-0 max-w-full">
+            <div className="flex items-center gap-2.5 min-w-0 flex-1">
               <div className="w-8 h-8 rounded-xl bg-amber-500/20 flex items-center justify-center shrink-0 text-amber-600 dark:text-amber-400">
                 <WifiOff className="h-4 w-4" />
               </div>
-              <div className="min-w-0">
+              <div className="min-w-0 flex-1">
                 <p className="font-bold tracking-tight">Offline Mode Active</p>
-                <p className="text-[11px] text-[var(--muted)] truncate">
+                <p className="text-[11px] text-[var(--muted)] break-words">
                   Loaded your last known schedule shell from offline cache.{lastSyncTimestamp ? ` Last synced: ${new Date(lastSyncTimestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', month: 'short', day: 'numeric' })}` : ''}
                 </p>
               </div>
@@ -551,40 +551,40 @@ export default function SchedulePage() {
 
         {/* ALERTS & NOTIFICATIONS */}
         {notification && (
-          <div className="flex items-center gap-2.5 rounded-xl px-4 py-3 text-xs bg-blue-500/10 border border-blue-500/30 text-blue-600 dark:text-blue-400 font-semibold animate-in fade-in slide-in-from-top-2 duration-200">
+          <div className="flex items-center gap-2.5 rounded-xl px-4 py-3 text-xs bg-blue-500/10 border border-blue-500/30 text-blue-600 dark:text-blue-400 font-semibold animate-in fade-in slide-in-from-top-2 duration-200 min-w-0 max-w-full">
             <CheckCircle2 className="h-4 w-4 shrink-0 text-blue-600 dark:text-blue-400" />
-            <span>{notification}</span>
+            <span className="break-words min-w-0 flex-1">{notification}</span>
           </div>
         )}
 
         {creationWarnings.length > 0 && (
-          <div className="p-3.5 rounded-xl text-xs bg-amber-500/10 border border-amber-500/30 text-amber-600 dark:text-amber-400 space-y-1 animate-in fade-in">
+          <div className="p-3.5 rounded-xl text-xs bg-amber-500/10 border border-amber-500/30 text-amber-600 dark:text-amber-400 space-y-1 animate-in fade-in min-w-0 max-w-full">
             <div className="flex items-center gap-1.5 font-bold">
               <AlertTriangle className="h-4 w-4 shrink-0" />
               <span>Operational Notice:</span>
             </div>
-            <ul className="list-disc list-inside pl-1 space-y-0.5 text-[11px]">
+            <ul className="list-disc list-inside pl-1 space-y-0.5 text-[11px] break-words">
               {creationWarnings.map((w, idx) => (
-                <li key={idx}>{w}</li>
+                <li key={idx} className="break-words">{w}</li>
               ))}
             </ul>
           </div>
         )}
 
         {/* EXECUTIVE KPI PULSE BAR */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 min-w-0 max-w-full">
           {/* Card 1: Next Holiday */}
           <div
-            className="p-3.5 rounded-2xl border transition-all hover:border-amber-500/40 relative overflow-hidden group"
+            className="p-3.5 rounded-2xl border transition-all hover:border-amber-500/40 relative overflow-hidden group min-w-0"
             style={{ background: 'var(--surface)', borderColor: 'var(--line)' }}
           >
             <div className="absolute -right-3 -bottom-3 w-16 h-16 rounded-full bg-amber-500/5 blur-xl pointer-events-none group-hover:bg-amber-500/10 transition-colors" />
-            <div className="flex items-center justify-between mb-1.5">
-              <span className="text-[11px] font-semibold text-[var(--muted)] flex items-center gap-1.5">
-                <Flag className="h-3.5 w-3.5 text-amber-500" /> Next Public Holiday
+            <div className="flex items-center justify-between mb-1.5 min-w-0 gap-1">
+              <span className="text-[11px] font-semibold text-[var(--muted)] flex items-center gap-1.5 truncate">
+                <Flag className="h-3.5 w-3.5 text-amber-500 shrink-0" /> <span className="truncate">Next Holiday</span>
               </span>
               {nextHoliday?.diffDays !== undefined && (
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30">
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30 shrink-0">
                   {nextHoliday.diffDays === 0 ? 'Today!' : nextHoliday.diffDays === 1 ? 'Tomorrow' : `In ${nextHoliday.diffDays}d`}
                 </span>
               )}
@@ -592,86 +592,86 @@ export default function SchedulePage() {
             <div className="text-sm font-bold text-[var(--ink)] truncate" title={nextHoliday?.title || 'None upcoming'}>
               {nextHoliday?.title || 'None Scheduled'}
             </div>
-            <div className="text-[11px] text-[var(--muted)] mt-0.5">
+            <div className="text-[11px] text-[var(--muted)] mt-0.5 truncate">
               {nextHoliday ? new Date(nextHoliday.start_time).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : 'All gazetted holidays cleared'}
             </div>
           </div>
 
           {/* Card 2: Working Days in Month */}
           <div
-            className="p-3.5 rounded-2xl border transition-all hover:border-blue-500/40 relative overflow-hidden group"
+            className="p-3.5 rounded-2xl border transition-all hover:border-blue-500/40 relative overflow-hidden group min-w-0"
             style={{ background: 'var(--surface)', borderColor: 'var(--line)' }}
           >
             <div className="absolute -right-3 -bottom-3 w-16 h-16 rounded-full bg-blue-500/5 blur-xl pointer-events-none group-hover:bg-blue-500/10 transition-colors" />
-            <div className="flex items-center justify-between mb-1.5">
-              <span className="text-[11px] font-semibold text-[var(--muted)] flex items-center gap-1.5">
-                <Briefcase className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" /> Operational Month
+            <div className="flex items-center justify-between mb-1.5 min-w-0 gap-1">
+              <span className="text-[11px] font-semibold text-[var(--muted)] flex items-center gap-1.5 truncate">
+                <Briefcase className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400 shrink-0" /> <span className="truncate">Month Scope</span>
               </span>
-              <span className="text-[10px] font-bold text-blue-600 dark:text-blue-400 bg-blue-500/10 px-2 py-0.5 rounded-full border border-blue-500/20">
+              <span className="text-[10px] font-bold text-blue-600 dark:text-blue-400 bg-blue-500/10 px-2 py-0.5 rounded-full border border-blue-500/20 shrink-0">
                 {workingDaysInfo.monthName}
               </span>
             </div>
-            <div className="text-sm font-bold text-[var(--ink)] flex items-baseline gap-1.5">
-              <span>{workingDaysInfo.workDays} Working Days</span>
+            <div className="text-sm font-bold text-[var(--ink)] flex items-baseline gap-1.5 truncate">
+              <span className="truncate">{workingDaysInfo.workDays} Working Days</span>
             </div>
-            <div className="text-[11px] text-[var(--muted)] mt-0.5">
+            <div className="text-[11px] text-[var(--muted)] mt-0.5 truncate">
               {workingDaysInfo.holidayCount} public holiday{workingDaysInfo.holidayCount === 1 ? '' : 's'} defined
             </div>
           </div>
 
           {/* Card 3: Scheduled Engagements */}
           <div
-            className="p-3.5 rounded-2xl border transition-all hover:border-indigo-500/40 relative overflow-hidden group"
+            className="p-3.5 rounded-2xl border transition-all hover:border-indigo-500/40 relative overflow-hidden group min-w-0"
             style={{ background: 'var(--surface)', borderColor: 'var(--line)' }}
           >
             <div className="absolute -right-3 -bottom-3 w-16 h-16 rounded-full bg-indigo-500/5 blur-xl pointer-events-none group-hover:bg-indigo-500/10 transition-colors" />
-            <div className="flex items-center justify-between mb-1.5">
-              <span className="text-[11px] font-semibold text-[var(--muted)] flex items-center gap-1.5">
-                <CalendarCheck className="h-3.5 w-3.5 text-indigo-500" /> Month Capacity
+            <div className="flex items-center justify-between mb-1.5 min-w-0 gap-1">
+              <span className="text-[11px] font-semibold text-[var(--muted)] flex items-center gap-1.5 truncate">
+                <CalendarCheck className="h-3.5 w-3.5 text-indigo-500 shrink-0" /> <span className="truncate">Capacity</span>
               </span>
-              <span className="text-[10px] font-bold text-indigo-500 bg-indigo-500/10 px-2 py-0.5 rounded-full border border-indigo-500/20">
+              <span className="text-[10px] font-bold text-indigo-500 bg-indigo-500/10 px-2 py-0.5 rounded-full border border-indigo-500/20 shrink-0">
                 {monthStats.total} Events
               </span>
             </div>
-            <div className="text-sm font-bold text-[var(--ink)]">
+            <div className="text-sm font-bold text-[var(--ink)] truncate">
               {monthStats.meetingsCount} Meetings &middot; {monthStats.holidaysCount} Holidays
             </div>
-            <div className="text-[11px] text-[var(--muted)] mt-0.5">
+            <div className="text-[11px] text-[var(--muted)] mt-0.5 truncate">
               {monthStats.deadlinesCount} active milestones/due dates
             </div>
           </div>
 
           {/* Card 4: Google Workspace Live Sync */}
           <div
-            className="p-3.5 rounded-2xl border transition-all hover:border-emerald-500/40 relative overflow-hidden group"
+            className="p-3.5 rounded-2xl border transition-all hover:border-emerald-500/40 relative overflow-hidden group min-w-0"
             style={{ background: 'var(--surface)', borderColor: 'var(--line)' }}
           >
             <div className="absolute -right-3 -bottom-3 w-16 h-16 rounded-full bg-emerald-500/5 blur-xl pointer-events-none group-hover:bg-emerald-500/10 transition-colors" />
-            <div className="flex items-center justify-between mb-1.5">
-              <span className="text-[11px] font-semibold text-[var(--muted)] flex items-center gap-1.5">
-                <Zap className="h-3.5 w-3.5 text-emerald-500" /> Cloud Sync Engine
+            <div className="flex items-center justify-between mb-1.5 min-w-0 gap-1">
+              <span className="text-[11px] font-semibold text-[var(--muted)] flex items-center gap-1.5 truncate">
+                <Zap className="h-3.5 w-3.5 text-emerald-500 shrink-0" /> <span className="truncate">Sync Engine</span>
               </span>
-              <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+              <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
             </div>
-            <div className="text-sm font-bold text-[var(--ink)] flex items-center gap-1.5">
-              <span>Google Calendar</span>
-              <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+            <div className="text-sm font-bold text-[var(--ink)] flex items-center gap-1.5 truncate">
+              <span className="truncate">Google Calendar</span>
+              <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 shrink-0">
                 Active
               </span>
             </div>
-            <div className="text-[11px] text-[var(--muted)] mt-0.5">
+            <div className="text-[11px] text-[var(--muted)] mt-0.5 truncate">
               Bidirectional auto-sync &amp; RSVP
             </div>
           </div>
         </div>
 
         {/* CONTROLS: VIEW SWITCHER + VIBRANT CATEGORY PILLS */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 p-2 rounded-2xl border border-[var(--line)] bg-[var(--surface)]">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 p-2 rounded-2xl border border-[var(--line)] bg-[var(--surface)] min-w-0 max-w-full overflow-hidden">
           {/* Segmented View Switcher */}
-          <div className="flex items-center gap-1 p-1 rounded-xl bg-[var(--paper)] border border-[var(--line)] shrink-0 self-start md:self-auto">
+          <div className="flex items-center gap-1 p-1 rounded-xl bg-[var(--paper)] border border-[var(--line)] shrink-0 self-start md:self-auto overflow-x-auto max-w-full scrollbar-none">
             <button
               onClick={() => setActiveView('month')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 shrink-0 ${
                 activeView === 'month'
                   ? 'bg-blue-600 text-white shadow-sm'
                   : 'text-[var(--muted)] hover:text-[var(--ink)]'
@@ -681,7 +681,7 @@ export default function SchedulePage() {
             </button>
             <button
               onClick={() => setActiveView('agenda')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 shrink-0 ${
                 activeView === 'agenda'
                   ? 'bg-blue-600 text-white shadow-sm'
                   : 'text-[var(--muted)] hover:text-[var(--ink)]'
@@ -691,7 +691,7 @@ export default function SchedulePage() {
             </button>
             <button
               onClick={() => setActiveView('day')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 shrink-0 ${
                 activeView === 'day'
                   ? 'bg-blue-600 text-white shadow-sm'
                   : 'text-[var(--muted)] hover:text-[var(--ink)]'
@@ -702,7 +702,7 @@ export default function SchedulePage() {
           </div>
 
           {/* Interactive Category Filter Pills */}
-          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 md:pb-0 scrollbar-none">
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 md:pb-0 scrollbar-none min-w-0 max-w-full">
             <button
               onClick={() => setTypeFilter('')}
               className={`px-2.5 py-1 rounded-lg text-xs font-bold shrink-0 transition-all border ${
@@ -822,31 +822,31 @@ export default function SchedulePage() {
                         borderColor: isStartingSoon ? 'var(--teal)' : 'var(--line)',
                       }}
                     >
-                      <div className="space-y-1.5 flex-1">
-                        <div className="flex items-center gap-2 flex-wrap">
+                      <div className="space-y-1.5 flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap min-w-0">
                           <span
-                            className="px-2.5 py-0.5 rounded-full text-[10px] font-bold"
+                            className="px-2.5 py-0.5 rounded-full text-[10px] font-bold shrink-0"
                             style={{ background: conf.bg, color: conf.color }}
                           >
                             {conf.label}
                           </span>
                           {isStartingSoon && (
-                            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-rose-500/20 text-rose-500 animate-pulse flex items-center gap-1">
+                            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-rose-500/20 text-rose-500 animate-pulse flex items-center gap-1 shrink-0">
                               <Bell className="h-3 w-3" /> Starts in {Math.round(diffMinutes)} mins
                             </span>
                           )}
-                          <span className="text-xs font-bold text-[var(--ink)]">
+                          <span className="text-xs font-bold text-[var(--ink)] shrink-0">
                             {fmtTime(ev.start_time)} – {fmtTime(ev.end_time)}
                           </span>
                         </div>
 
-                        <h3 className="text-sm font-bold text-[var(--ink)]">{ev.title}</h3>
+                        <h3 className="text-sm font-bold text-[var(--ink)] break-words">{ev.title}</h3>
                         {ev.description && (
-                          <p className="text-xs text-[var(--muted)]">{ev.description}</p>
+                          <p className="text-xs text-[var(--muted)] break-words">{ev.description}</p>
                         )}
                         {ev.location && (
-                          <div className="text-[11px] text-[var(--muted)] flex items-center gap-1 mt-1">
-                            <MapPin className="h-3 w-3" /> {ev.location}
+                          <div className="text-[11px] text-[var(--muted)] flex items-center gap-1 mt-1 break-words">
+                            <MapPin className="h-3 w-3 shrink-0" /> <span className="break-words">{ev.location}</span>
                           </div>
                         )}
                       </div>
@@ -871,31 +871,31 @@ export default function SchedulePage() {
           </div>
         ) : activeView === 'day' ? (
           /* DEDICATED DAY VIEW */
-          <div className="p-6 rounded-3xl border border-[var(--line)] bg-[var(--surface)] space-y-4">
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between pb-3 border-b border-[var(--line)] gap-2">
-              <div>
-                <h2 className="text-base font-bold text-[var(--ink)] flex items-center gap-2">
-                  <CalendarDays className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-                  Day Focus: {selectedDateObj.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
+          <div className="p-4 sm:p-6 rounded-3xl border border-[var(--line)] bg-[var(--surface)] space-y-4 min-w-0 max-w-full overflow-hidden">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between pb-3 border-b border-[var(--line)] gap-2 min-w-0">
+              <div className="min-w-0 flex-1">
+                <h2 className="text-base font-bold text-[var(--ink)] flex items-center gap-2 min-w-0">
+                  <CalendarDays className="h-5 w-5 text-blue-600 dark:text-blue-400 shrink-0" />
+                  <span className="truncate">Day Focus: {selectedDateObj.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}</span>
                 </h2>
-                <div className="flex items-center gap-2 mt-1">
+                <div className="flex items-center gap-2 mt-1 min-w-0 flex-wrap">
                   {isSelectedToday && (
-                    <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-blue-500/15 text-blue-600 dark:text-blue-400">
+                    <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-blue-500/15 text-blue-600 dark:text-blue-400 shrink-0">
                       Today
                     </span>
                   )}
                   {isSelectedWeekend && (
-                    <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-purple-500/15 text-purple-600 dark:text-purple-400">
+                    <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-purple-500/15 text-purple-600 dark:text-purple-400 shrink-0">
                       Weekend
                     </span>
                   )}
-                  <span className="text-xs text-[var(--muted)]">
+                  <span className="text-xs text-[var(--muted)] truncate">
                     {selectedDayEvents.length} scheduled item{selectedDayEvents.length === 1 ? '' : 's'}
                   </span>
                 </div>
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <button
                   onClick={() => {
                     const prev = new Date(selectedDateObj.getTime() - 86400000);
@@ -940,11 +940,11 @@ export default function SchedulePage() {
             </div>
 
             {/* Hourly schedule layout */}
-            <div className="space-y-2 max-w-3xl">
+            <div className="space-y-2 max-w-3xl min-w-0 w-full">
               {selectedDayEvents.length === 0 ? (
                 <div className="p-12 text-center rounded-2xl border border-dashed border-[var(--line)] bg-[var(--paper)] space-y-2">
                   <p className="text-sm font-bold text-[var(--ink)]">No scheduled events for this date</p>
-                  <p className="text-xs text-[var(--muted)]">Use the button above to schedule a client meeting, standup, or milestone.</p>
+                  <p className="text-xs text-[var(--muted)] break-words">Use the button above to schedule a client meeting, standup, or milestone.</p>
                 </div>
               ) : (
                 selectedDayEvents.map((ev) => {
@@ -953,29 +953,29 @@ export default function SchedulePage() {
                   return (
                     <div
                       key={ev.id}
-                      className="p-4 rounded-2xl border border-[var(--line)] bg-[var(--paper)] flex items-center justify-between gap-4"
+                      className="p-4 rounded-2xl border border-[var(--line)] bg-[var(--paper)] flex flex-col sm:flex-row sm:items-center justify-between gap-4 min-w-0"
                     >
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-2">
+                      <div className="space-y-1 min-w-0 flex-1">
+                        <div className="flex items-center gap-2 flex-wrap min-w-0">
                           <span
-                            className="px-2 py-0.5 rounded text-[10px] font-bold"
+                            className="px-2 py-0.5 rounded text-[10px] font-bold shrink-0"
                             style={{ background: conf.bg, color: conf.color }}
                           >
                             {conf.label}
                           </span>
-                          <span className="text-xs font-bold text-[var(--muted)]">
+                          <span className="text-xs font-bold text-[var(--muted)] shrink-0">
                             {ev.event_type === 'holiday' ? 'All Day' : `${fmtTime(ev.start_time)} – ${fmtTime(ev.end_time)}`}
                           </span>
                         </div>
-                        <h3 className="text-sm font-bold text-[var(--ink)]">{ev.title}</h3>
-                        {ev.description && <p className="text-xs text-[var(--muted)]">{ev.description}</p>}
+                        <h3 className="text-sm font-bold text-[var(--ink)] break-words">{ev.title}</h3>
+                        {ev.description && <p className="text-xs text-[var(--muted)] break-words">{ev.description}</p>}
                       </div>
                       {ev.meeting_link && platform && (
                         <a
                           href={ev.meeting_link}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="glow-btn-primary px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 text-white"
+                          className="glow-btn-primary px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 text-white shrink-0 self-start sm:self-auto"
                         >
                           <Video className="h-4 w-4" /> Join
                         </a>
@@ -988,26 +988,26 @@ export default function SchedulePage() {
           </div>
         ) : (
           /* CLASSIC MONTH VIEW + DYNAMIC RICH SIDEBAR */
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 min-w-0 max-w-full">
             
             {/* LEFT / CENTER: FULL-HEIGHT CALENDAR GRID (8 of 12 cols) */}
             <div
-              className="lg:col-span-8 rounded-3xl p-5 border border-[var(--line)] flex flex-col justify-between shadow-xs"
+              className="lg:col-span-8 rounded-3xl p-3 sm:p-5 border border-[var(--line)] flex flex-col justify-between shadow-xs min-w-0 max-w-full overflow-hidden"
               style={{ background: 'var(--surface)' }}
             >
-              <div>
+              <div className="min-w-0 max-w-full">
                 {/* Month Navigator Header */}
-                <div className="flex items-center justify-between pb-4 mb-4 border-b border-[var(--line)]">
-                  <div className="flex items-center gap-2">
-                    <span className="text-lg font-bold text-[var(--ink)] tracking-tight" style={{ fontFamily: 'Bricolage Grotesque, sans-serif' }}>
+                <div className="flex flex-wrap items-center justify-between gap-2 pb-4 mb-4 border-b border-[var(--line)] min-w-0">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="text-base sm:text-lg font-bold text-[var(--ink)] tracking-tight truncate" style={{ fontFamily: 'Bricolage Grotesque, sans-serif' }}>
                       {MONTH_NAMES[calMonth]} {calYear}
                     </span>
-                    <span className="text-xs text-[var(--muted)] font-medium">
+                    <span className="text-xs text-[var(--muted)] font-medium shrink-0">
                       ({workingDaysInfo.workDays} work days)
                     </span>
                   </div>
 
-                  <div className="flex items-center gap-1.5">
+                  <div className="flex items-center gap-1.5 shrink-0">
                     <button
                       onClick={() => {
                         if (calMonth === 0) {
@@ -1052,13 +1052,13 @@ export default function SchedulePage() {
                 </div>
 
                 {/* Day Names Header */}
-                <div className="grid grid-cols-7 gap-2 text-center text-xs font-bold text-[var(--muted)] mb-2">
+                <div className="grid grid-cols-7 gap-1 sm:gap-2 text-center text-[10px] sm:text-xs font-bold text-[var(--muted)] mb-2 min-w-0">
                   {DAY_NAMES.map((d, i) => {
                     const isWeekendHeader = i === 0 || i === 6;
                     return (
                       <div
                         key={d}
-                        className={`py-1 rounded-md ${isWeekendHeader ? 'text-amber-500/80 dark:text-amber-400/80' : ''}`}
+                        className={`py-1 rounded-md truncate ${isWeekendHeader ? 'text-amber-500/80 dark:text-amber-400/80' : ''}`}
                       >
                         {d}
                       </div>
@@ -1067,7 +1067,7 @@ export default function SchedulePage() {
                 </div>
 
                 {/* Calendar Grid Cells */}
-                <div className="grid grid-cols-7 gap-1.5 sm:gap-2">
+                <div className="grid grid-cols-7 gap-1 sm:gap-2 min-w-0 max-w-full">
                   {calGrid.map((dayNum, idx) => {
                     if (dayNum === null) {
                       return (
@@ -1207,42 +1207,42 @@ export default function SchedulePage() {
 
             {/* RIGHT SIDEBAR: DYNAMIC SMART DAY & MONTH HUB (4 of 12 cols) */}
             <div
-              className="lg:col-span-4 rounded-3xl p-5 border border-[var(--line)] flex flex-col justify-between shadow-xs space-y-5"
+              className="lg:col-span-4 rounded-3xl p-3.5 sm:p-5 border border-[var(--line)] flex flex-col justify-between shadow-xs space-y-5 min-w-0 max-w-full overflow-hidden"
               style={{ background: 'var(--surface)' }}
             >
-              <div className="space-y-4">
+              <div className="space-y-4 min-w-0 max-w-full">
                 {/* Selected Date Header */}
-                <div className="pb-3 border-b border-[var(--line)]">
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-[11px] font-bold text-[var(--muted)] uppercase tracking-wider flex items-center gap-1.5">
+                <div className="pb-3 border-b border-[var(--line)] min-w-0">
+                  <div className="flex items-center justify-between mb-1 min-w-0 flex-wrap gap-1">
+                    <span className="text-[11px] font-bold text-[var(--muted)] uppercase tracking-wider flex items-center gap-1.5 shrink-0">
                       <CalendarDays className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" /> Selected Date
                     </span>
                     {isSelectedToday ? (
-                      <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-blue-500/15 text-blue-600 dark:text-blue-400 border border-blue-500/30">
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-blue-500/15 text-blue-600 dark:text-blue-400 border border-blue-500/30 shrink-0">
                         Today
                       </span>
                     ) : isSelectedWeekend ? (
-                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30">
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30 shrink-0">
                         Weekend
                       </span>
                     ) : (
-                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-[var(--paper)] text-[var(--muted)] border border-[var(--line)]">
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-[var(--paper)] text-[var(--muted)] border border-[var(--line)] shrink-0">
                         Working Day
                       </span>
                     )}
                   </div>
 
-                  <h2 className="text-base font-bold text-[var(--ink)]">
+                  <h2 className="text-base font-bold text-[var(--ink)] break-words">
                     {selectedDateObj.toLocaleDateString(undefined, { weekday: 'short', month: 'long', day: 'numeric', year: 'numeric' })}
                   </h2>
 
-                  <div className="flex items-center justify-between mt-2 pt-2 border-t border-[var(--line)]/50">
-                    <span className="text-xs text-[var(--muted)]">
+                  <div className="flex items-center justify-between mt-2 pt-2 border-t border-[var(--line)]/50 min-w-0">
+                    <span className="text-xs text-[var(--muted)] truncate">
                       {selectedDayEvents.length} Event{selectedDayEvents.length === 1 ? '' : 's'} scheduled
                     </span>
                     <button
                       onClick={() => openCreateModal(selected)}
-                      className="text-xs font-bold text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1"
+                      className="text-xs font-bold text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1 shrink-0"
                     >
                       <Plus className="h-3.5 w-3.5" /> Add Event
                     </button>
@@ -1251,7 +1251,7 @@ export default function SchedulePage() {
 
                 {/* Selected Day's Events List */}
                 {selectedDayEvents.length > 0 ? (
-                  <div className="space-y-2.5 max-h-[260px] overflow-y-auto pr-1 scrollbar-thin">
+                  <div className="space-y-2.5 max-h-[260px] overflow-y-auto pr-1 scrollbar-thin min-w-0">
                     {selectedDayEvents.map((ev) => {
                       const conf = TYPE_CONFIG[ev.event_type] || TYPE_CONFIG.event;
                       const platform = getPlatformBadge(ev.meeting_link, ev.meeting_platform);
@@ -1260,41 +1260,41 @@ export default function SchedulePage() {
                       return (
                         <div
                           key={ev.id}
-                          className="p-3.5 rounded-2xl border transition-all hover:shadow-xs flex flex-col gap-2"
+                          className="p-3.5 rounded-2xl border transition-all hover:shadow-xs flex flex-col gap-2 min-w-0"
                           style={{ background: 'var(--paper)', borderColor: 'var(--line)' }}
                         >
-                          <div className="flex items-center justify-between gap-1">
+                          <div className="flex items-center justify-between gap-1 flex-wrap min-w-0">
                             <span
-                              className="px-2 py-0.5 rounded-md text-[10px] font-bold flex items-center gap-1"
+                              className="px-2 py-0.5 rounded-md text-[10px] font-bold flex items-center gap-1 shrink-0"
                               style={{ background: conf.bg, color: conf.color }}
                             >
                               {isHol ? '🇮🇳' : null} {conf.label}
                             </span>
-                            <span className="text-[11px] font-bold text-[var(--muted)]">
+                            <span className="text-[11px] font-bold text-[var(--muted)] shrink-0">
                               {isHol ? 'Gazetted Holiday' : fmtTime(ev.start_time)}
                             </span>
                           </div>
 
-                          <h4 className="text-xs font-bold text-[var(--ink)] leading-snug">{ev.title}</h4>
+                          <h4 className="text-xs font-bold text-[var(--ink)] leading-snug break-words">{ev.title}</h4>
 
                           {ev.description && (
-                            <p className="text-[11px] text-[var(--muted)] leading-relaxed">{ev.description}</p>
+                            <p className="text-[11px] text-[var(--muted)] leading-relaxed break-words">{ev.description}</p>
                           )}
 
                           {ev.location && (
-                            <div className="text-[10px] text-[var(--muted)] flex items-center gap-1">
-                              <MapPin className="h-3 w-3 text-blue-600" /> {ev.location}
+                            <div className="text-[10px] text-[var(--muted)] flex items-center gap-1 break-words">
+                              <MapPin className="h-3 w-3 text-blue-600 shrink-0" /> <span className="break-words">{ev.location}</span>
                             </div>
                           )}
 
                           {ev.meeting_link && platform && (
-                            <div className="mt-1 pt-2 border-t border-[var(--line)] flex items-center justify-between">
-                              <span className="text-[10px] text-[var(--muted)]">{platform.name}</span>
+                            <div className="mt-1 pt-2 border-t border-[var(--line)] flex items-center justify-between flex-wrap gap-1 min-w-0">
+                              <span className="text-[10px] text-[var(--muted)] truncate">{platform.name}</span>
                               <a
                                 href={ev.meeting_link}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="glow-btn-primary px-3 py-1 rounded-lg text-xs font-bold text-white flex items-center gap-1.5"
+                                className="glow-btn-primary px-3 py-1 rounded-lg text-xs font-bold text-white flex items-center gap-1.5 shrink-0"
                               >
                                 <Video className="h-3.5 w-3.5" /> Join Call
                               </a>
@@ -1306,13 +1306,13 @@ export default function SchedulePage() {
                   </div>
                 ) : (
                   /* Clean Slate Empty State */
-                  <div className="p-4 rounded-2xl border border-dashed border-[var(--line)] bg-[var(--paper)]/60 text-center space-y-2">
+                  <div className="p-4 rounded-2xl border border-dashed border-[var(--line)] bg-[var(--paper)]/60 text-center space-y-2 min-w-0">
                     <div className="h-9 w-9 rounded-xl bg-blue-500/10 border border-blue-500/20 text-blue-600 dark:text-blue-400 flex items-center justify-center mx-auto">
                       <Sparkles className="h-4 w-4" />
                     </div>
                     <div>
                       <h4 className="text-xs font-bold text-[var(--ink)]">Open Focus Day</h4>
-                      <p className="text-[11px] text-[var(--muted)] max-w-xs mx-auto">
+                      <p className="text-[11px] text-[var(--muted)] max-w-xs mx-auto break-words">
                         Zero meetings or commitments on this date.
                       </p>
                     </div>
@@ -1342,15 +1342,15 @@ export default function SchedulePage() {
                 )}
 
                 {/* UPCOMING COMPANY HIGHLIGHTS TIMELINE (Prevents Empty Void) */}
-                <div className="pt-3 border-t border-[var(--line)] space-y-2.5">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[11px] font-bold text-[var(--muted)] uppercase tracking-wider flex items-center gap-1.5">
-                      <Flag className="h-3.5 w-3.5 text-amber-500" /> Upcoming Highlights
+                <div className="pt-3 border-t border-[var(--line)] space-y-2.5 min-w-0">
+                  <div className="flex items-center justify-between min-w-0">
+                    <span className="text-[11px] font-bold text-[var(--muted)] uppercase tracking-wider flex items-center gap-1.5 truncate">
+                      <Flag className="h-3.5 w-3.5 text-amber-500 shrink-0" /> <span className="truncate">Upcoming Highlights</span>
                     </span>
-                    <span className="text-[10px] font-medium text-[var(--muted)]">Across Cruvels</span>
+                    <span className="text-[10px] font-medium text-[var(--muted)] shrink-0">Across Cruvels</span>
                   </div>
 
-                  <div className="space-y-1.5">
+                  <div className="space-y-1.5 min-w-0">
                     {upcomingHighlights.map((ev) => {
                       const conf = TYPE_CONFIG[ev.event_type] || TYPE_CONFIG.event;
                       const dateFormatted = new Date(ev.start_time).toLocaleDateString(undefined, {
@@ -1369,13 +1369,13 @@ export default function SchedulePage() {
                             setCalYear(d.getFullYear());
                             setCalMonth(d.getMonth());
                           }}
-                          className="p-2.5 rounded-xl border border-[var(--line)] bg-[var(--paper)] hover:border-blue-500/50 hover:bg-[var(--surface-hover)] transition-all cursor-pointer flex items-center justify-between gap-2"
+                          className="p-2.5 rounded-xl border border-[var(--line)] bg-[var(--paper)] hover:border-blue-500/50 hover:bg-[var(--surface-hover)] transition-all cursor-pointer flex items-center justify-between gap-2 min-w-0"
                         >
-                          <div className="flex items-center gap-2 truncate">
+                          <div className="flex items-center gap-2 truncate min-w-0 flex-1">
                             <span className="text-sm shrink-0">{isHol ? '🇮🇳' : '📌'}</span>
-                            <div className="truncate">
+                            <div className="truncate min-w-0 flex-1">
                               <div className="text-xs font-bold text-[var(--ink)] truncate">{ev.title}</div>
-                              <div className="text-[10px] text-[var(--muted)]">{conf.label}</div>
+                              <div className="text-[10px] text-[var(--muted)] truncate">{conf.label}</div>
                             </div>
                           </div>
 

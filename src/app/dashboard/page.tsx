@@ -942,15 +942,15 @@ export default function DashboardPage() {
                       borderColor: 'var(--line-soft)',
                     }}
                   >
-                    <div className="space-y-1 min-w-0 pr-3">
+                    <div className="space-y-1 min-w-0 pr-3 flex-1">
                       <div className="text-xs font-bold truncate" style={{ color: 'var(--ink)' }}>{evt.title}</div>
                       {evt.description && (
                         <div className="text-[11px] truncate" style={{ color: 'var(--ink-2)' }}>{evt.description}</div>
                       )}
                       {evt.location && (
-                        <div className="text-[10px] flex items-center gap-1" style={{ color: 'var(--muted)' }}>
-                          <MapPin className="h-3 w-3" style={{ color: 'var(--teal)' }} />
-                          <span>{evt.location}</span>
+                        <div className="text-[10px] flex items-center gap-1 truncate" style={{ color: 'var(--muted)' }}>
+                          <MapPin className="h-3 w-3 shrink-0" style={{ color: 'var(--teal)' }} />
+                          <span className="truncate">{evt.location}</span>
                         </div>
                       )}
                     </div>
