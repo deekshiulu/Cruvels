@@ -19,10 +19,22 @@ import {
   EyeOff,
   Check,
   X,
+  Lock,
+  ShieldCheck,
+  Smartphone,
+  RefreshCw,
+  Trash2,
 } from 'lucide-react';
 import { AuthSessionUser, Employee } from '@/lib/db/types';
 import { clearTabSession } from '@/lib/auth/client-session';
 import { clientCache } from '@/lib/cache/clientCache';
+import {
+  getStoredMpinRecord,
+  saveMpinRecord,
+  clearStoredMpin,
+  encryptMpinSession,
+  MpinDeviceRecord,
+} from '@/lib/auth/mpin-crypto';
 
 function ProfileContent() {
   const searchParams = useSearchParams();
@@ -30,6 +42,15 @@ function ProfileContent() {
   const [user, setUser] = useState<AuthSessionUser | null>(null);
   const [employee, setEmployee] = useState<Employee | null>(null);
   const [loading, setLoading] = useState(true);
+
+  // MPIN Management State
+  const [mpinRecord, setMpinRecord] = useState<MpinDeviceRecord | null>(null);
+  const [showMpinModal, setShowMpinModal] = useState(false);
+  const [mpinStep, setMpinStep] = useState<'enter' | 'confirm'>('enter');
+  const [pinValue, setPinValue] = useState('');
+  const [confirmPinValue, setConfirmPinValue] = useState('');
+  const [mpinSaving, setMpinSaving] = useState(false);
+  const [mpinModalError, setMpinModalError] = useState<string | null>(null);
 
   // Profile editable fields
   const [phone, setPhone] = useState('');
@@ -71,7 +92,111 @@ function ProfileContent() {
 
   useEffect(() => {
     fetchProfile();
+    if (typeof window !== 'undefined') {
+      setMpinRecord(getStoredMpinRecord());
+    }
   }, []);
+
+  const handleOpenMpinModal = () => {
+    setMpinStep('enter');
+    setPinValue('');
+    setConfirmPinValue('');
+    setMpinModalError(null);
+    setShowMpinModal(true);
+  };
+
+  const handleMpinPadClick = (digit: string) => {
+    if (mpinSaving) return;
+    if (digit === 'backspace') {
+      if (mpinStep === 'enter') setPinValue((p) => p.slice(0, -1));
+      else setConfirmPinValue((p) => p.slice(0, -1));
+      setMpinModalError(null);
+      return;
+    }
+    if (digit === 'clear') {
+      if (mpinStep === 'enter') setPinValue('');
+      else setConfirmPinValue('');
+      setMpinModalError(null);
+      return;
+    }
+
+    if (mpinStep === 'enter') {
+      if (pinValue.length < 4) {
+        const next = pinValue + digit;
+        setPinValue(next);
+        setMpinModalError(null);
+        if (next.length === 4) {
+          setTimeout(() => setMpinStep('confirm'), 200);
+        }
+      }
+    } else {
+      if (confirmPinValue.length < 4) {
+        const next = confirmPinValue + digit;
+        setConfirmPinValue(next);
+        setMpinModalError(null);
+        if (next.length === 4) {
+          saveNewMpin(pinValue, next);
+        }
+      }
+    }
+  };
+
+  const saveNewMpin = async (pin: string, confirmed: string) => {
+    if (pin !== confirmed) {
+      setMpinModalError('PINs do not match. Please re-enter your 4-digit PIN.');
+      setConfirmPinValue('');
+      setPinValue('');
+      setMpinStep('enter');
+      return;
+    }
+
+    setMpinSaving(true);
+    setMpinModalError(null);
+
+    try {
+      const res = await fetch('/api/auth/mpin/setup', { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        setMpinModalError(data.error || 'Failed to initialize MPIN encryption key.');
+        setMpinSaving(false);
+        return;
+      }
+
+      const record = await encryptMpinSession(pin, {
+        token: data.token,
+        user: data.user,
+      });
+
+      saveMpinRecord(record);
+      setMpinRecord(record);
+      if (typeof window !== 'undefined') {
+        sessionStorage.setItem('cruvels_mpin_unlocked', 'true');
+      }
+      setShowMpinModal(false);
+      setNotification('4-Digit Device MPIN activated successfully! This phone or browser is now secured.');
+      setTimeout(() => setNotification(null), 5000);
+    } catch {
+      setMpinModalError('Error encrypting and saving MPIN on device. Please try again.');
+    } finally {
+      setMpinSaving(false);
+    }
+  };
+
+  const handleRemoveMpin = () => {
+    if (window.confirm('Remove 4-digit MPIN from this device? You will need your full password to log in.')) {
+      clearStoredMpin();
+      setMpinRecord(null);
+      setNotification('4-Digit MPIN removed. Standard password login is now active.');
+      setTimeout(() => setNotification(null), 4000);
+    }
+  };
+
+  const handleTestLock = () => {
+    if (typeof window !== 'undefined') {
+      sessionStorage.removeItem('cruvels_mpin_unlocked');
+    }
+    window.location.href = '/login';
+  };
 
   const handleUpdateProfile = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -440,6 +565,204 @@ function ProfileContent() {
             </button>
           </form>
         </div>
+
+        {/* 4-Digit Device MPIN & Quick Unlock Card */}
+        <div className="rounded-3xl bg-white p-6 border border-slate-200 shadow-sm space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
+            <div className="flex items-center gap-2">
+              <Lock className="h-4 w-4 text-blue-600" />
+              <h3 className="text-sm font-bold text-slate-900">4-Digit Device MPIN & Quick Unlock</h3>
+            </div>
+            {mpinRecord ? (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 self-start sm:self-auto">
+                <ShieldCheck className="h-3.5 w-3.5 text-emerald-600" />
+                Active on This Device
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-amber-50 text-amber-700 border border-amber-200 self-start sm:self-auto">
+                <AlertCircle className="h-3.5 w-3.5 text-amber-600" />
+                Not Configured
+              </span>
+            )}
+          </div>
+
+          <p className="text-xs text-slate-600 leading-relaxed">
+            The 4-digit MPIN protects your account on this specific phone or browser. When set, closing and reopening the app prompts for your instant 4-digit PIN instead of requiring your full credentials each time.
+          </p>
+
+          {mpinRecord ? (
+            <div className="space-y-4 pt-1">
+              <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 text-xs space-y-1.5">
+                <div className="flex items-center justify-between text-slate-700">
+                  <span className="font-semibold flex items-center gap-1.5">
+                    <Smartphone className="h-3.5 w-3.5 text-slate-500" />
+                    Device User:
+                  </span>
+                  <span className="font-mono text-slate-900">{mpinRecord.user.name} ({mpinRecord.user.primaryAlias || mpinRecord.user.username})</span>
+                </div>
+                <div className="flex items-center justify-between text-slate-500 text-[11px]">
+                  <span>Last Unlocked:</span>
+                  <span>{new Date(mpinRecord.lastLoginAt).toLocaleString()}</span>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-3 pt-1">
+                <button
+                  type="button"
+                  onClick={handleOpenMpinModal}
+                  className="glow-btn-primary flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold text-white shadow-sm"
+                >
+                  <RefreshCw className="h-3.5 w-3.5" />
+                  <span>Change 4-Digit MPIN</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleTestLock}
+                  className="flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 border border-slate-300 transition-all shadow-sm"
+                >
+                  <Lock className="h-3.5 w-3.5 text-slate-600" />
+                  <span>Lock App Now (Test MPIN)</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleRemoveMpin}
+                  className="flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold text-rose-600 hover:bg-rose-50 border border-rose-200 transition-all"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                  <span>Remove MPIN</span>
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="pt-2">
+              <button
+                type="button"
+                onClick={handleOpenMpinModal}
+                className="glow-btn-primary flex items-center gap-2 rounded-xl px-5 py-2.5 text-xs font-bold text-white shadow-sm"
+              >
+                <Lock className="h-4 w-4" />
+                <span>Set Up 4-Digit Device MPIN</span>
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* MPIN Setup / Change Interactive Modal */}
+        {showMpinModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200">
+            <div className="w-full max-w-sm rounded-3xl bg-white p-6 shadow-2xl border border-slate-200 space-y-5 text-center">
+              <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+                <div className="flex items-center gap-2">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
+                    <Lock className="h-4 w-4" />
+                  </div>
+                  <h4 className="text-sm font-bold text-slate-900">
+                    {mpinRecord ? 'Change Device MPIN' : 'Set Up Device MPIN'}
+                  </h4>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowMpinModal(false)}
+                  className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+
+              <div className="space-y-1">
+                <p className="text-xs font-bold text-slate-800">
+                  {mpinStep === 'enter' ? 'Enter a 4-Digit PIN' : 'Confirm Your 4-Digit PIN'}
+                </p>
+                <p className="text-[11px] text-slate-500">
+                  {mpinStep === 'enter'
+                    ? 'Choose 4 numbers you will easily remember.'
+                    : 'Re-enter the exact same 4 numbers to verify.'}
+                </p>
+              </div>
+
+              {/* 4 PIN Dots */}
+              <div className="flex justify-center items-center gap-4 py-2">
+                {[0, 1, 2, 3].map((idx) => {
+                  const currentPin = mpinStep === 'enter' ? pinValue : confirmPinValue;
+                  const isFilled = idx < currentPin.length;
+                  return (
+                    <div
+                      key={idx}
+                      className={`h-4 w-4 rounded-full transition-all duration-200 ${
+                        isFilled
+                          ? 'bg-blue-600 scale-110 shadow-sm shadow-blue-500/50'
+                          : 'border-2 border-slate-300 bg-slate-100'
+                      }`}
+                    />
+                  );
+                })}
+              </div>
+
+              {mpinModalError && (
+                <div className="p-2 rounded-xl bg-rose-50 border border-rose-200 text-[11px] text-rose-600 font-medium">
+                  {mpinModalError}
+                </div>
+              )}
+
+              {/* Numeric Keypad */}
+              <div className="grid grid-cols-3 gap-2.5 max-w-[240px] mx-auto pt-2">
+                {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map((digit) => (
+                  <button
+                    key={digit}
+                    type="button"
+                    disabled={mpinSaving}
+                    onClick={() => handleMpinPadClick(digit)}
+                    className="h-12 rounded-2xl bg-slate-50 hover:bg-slate-100 border border-slate-200 text-base font-bold text-slate-800 transition-all active:scale-95 disabled:opacity-50"
+                  >
+                    {digit}
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  disabled={mpinSaving}
+                  onClick={() => handleMpinPadClick('clear')}
+                  className="h-12 rounded-2xl bg-slate-50 hover:bg-slate-100 border border-slate-200 text-[11px] font-bold text-slate-500 transition-all active:scale-95 disabled:opacity-50"
+                >
+                  Clear
+                </button>
+                <button
+                  type="button"
+                  disabled={mpinSaving}
+                  onClick={() => handleMpinPadClick('0')}
+                  className="h-12 rounded-2xl bg-slate-50 hover:bg-slate-100 border border-slate-200 text-base font-bold text-slate-800 transition-all active:scale-95 disabled:opacity-50"
+                >
+                  0
+                </button>
+                <button
+                  type="button"
+                  disabled={mpinSaving}
+                  onClick={() => handleMpinPadClick('backspace')}
+                  className="h-12 rounded-2xl bg-slate-50 hover:bg-slate-100 border border-slate-200 text-xs font-bold text-slate-500 transition-all active:scale-95 flex items-center justify-center disabled:opacity-50"
+                >
+                  ⌫
+                </button>
+              </div>
+
+              {mpinSaving && (
+                <p className="text-xs text-blue-600 font-semibold animate-pulse pt-2">
+                  Encrypting and saving MPIN on device...
+                </p>
+              )}
+
+              <div className="pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowMpinModal(false)}
+                  className="text-xs text-slate-500 hover:text-slate-800 font-medium py-1"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </AppShell>
   );

@@ -96,11 +96,25 @@ function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  // Mode: 'mpin' | 'login' | 'mpin-setup' | 'forgot'
-  const [view, setView] = useState<'mpin' | 'login' | 'mpin-setup' | 'forgot'>('login');
-
   // MPIN Unlock Screen State
-  const [savedMpinRecord, setSavedMpinRecord] = useState<MpinDeviceRecord | null>(null);
+  const [savedMpinRecord, setSavedMpinRecord] = useState<MpinDeviceRecord | null>(() => {
+    if (typeof window !== 'undefined') {
+      return getStoredMpinRecord();
+    }
+    return null;
+  });
+
+  // Mode: 'mpin' | 'login' | 'mpin-setup' | 'forgot'
+  const [view, setView] = useState<'mpin' | 'login' | 'mpin-setup' | 'forgot'>(() => {
+    if (typeof window !== 'undefined') {
+      const record = getStoredMpinRecord();
+      const params = new URLSearchParams(window.location.search);
+      const forcePassword = params.get('mode') === 'password' || params.get('action') === 'switch_account';
+      if (record && !forcePassword) return 'mpin';
+    }
+    return 'login';
+  });
+
   const [mpinInput, setMpinInput] = useState('');
   const [mpinError, setMpinError] = useState<string | null>(null);
   const [mpinLoading, setMpinLoading] = useState(false);
@@ -244,8 +258,10 @@ function LoginForm() {
     let mounted = true;
     validateTabSession().then((isActive) => {
       if (!mounted || !isActive) return;
-      // If user has an active MPIN lock screen on device, let them unlock it
-      if (getStoredMpinRecord() && view === 'mpin') return;
+      const record = getStoredMpinRecord();
+      const forcePassword = searchParams.get('mode') === 'password' || searchParams.get('action') === 'switch_account';
+      // If user has an active MPIN configured on device, NEVER auto-redirect past the lock screen!
+      if (record && !forcePassword) return;
 
       fetch('/api/auth/me')
         .then((r) => (r.ok ? r.json() : null))
@@ -264,7 +280,7 @@ function LoginForm() {
     return () => {
       mounted = false;
     };
-  }, [view]);
+  }, [searchParams]);
 
   /* ──────────────────────────────────────────────────────────────────────────
      MPIN UNLOCK LOGIC (Subsequent Logins)
@@ -336,6 +352,9 @@ function LoginForm() {
 
       // 3. Mark session active and update local state
       markTabSessionActive(true);
+      if (typeof window !== 'undefined') {
+        sessionStorage.setItem('cruvels_mpin_unlocked', 'true');
+      }
       updateMpinLastLogin();
 
       if (data.user) {
@@ -452,6 +471,9 @@ function LoginForm() {
       const record = await encryptMpinSession(pin, tempSessionPayload);
       saveMpinRecord(record);
       setSavedMpinRecord(record);
+      if (typeof window !== 'undefined') {
+        sessionStorage.setItem('cruvels_mpin_unlocked', 'true');
+      }
 
       if (tempSessionPayload.user?.mustChangePassword) {
         window.location.href = '/profile?force=password';
@@ -469,6 +491,9 @@ function LoginForm() {
   };
 
   const handleSkipMpinSetup = () => {
+    if (typeof window !== 'undefined') {
+      sessionStorage.setItem('cruvels_mpin_unlocked', 'true');
+    }
     if (tempSessionPayload?.user?.mustChangePassword) {
       window.location.href = '/profile?force=password';
     } else if (tempSessionPayload?.user?.role === 'admin') {
@@ -574,6 +599,10 @@ function LoginForm() {
         setView('mpin-setup');
         setLoading(false);
         return;
+      }
+
+      if (typeof window !== 'undefined') {
+        sessionStorage.setItem('cruvels_mpin_unlocked', 'true');
       }
 
       if (data.user?.mustChangePassword) {

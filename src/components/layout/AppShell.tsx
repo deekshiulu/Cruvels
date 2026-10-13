@@ -57,6 +57,7 @@ import {
 } from '@/lib/utils/sound';
 import { clientCache } from '@/lib/cache/clientCache';
 import { validateTabSession, clearTabSession, TAB_CHANNEL_NAME, TAB_SESSION_KEY } from '@/lib/auth/client-session';
+import { getStoredMpinRecord } from '@/lib/auth/mpin-crypto';
 import {
   syncPushSubscription,
   requestNotificationPermission,
@@ -376,6 +377,15 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         });
         return;
       }
+
+      // If device has an MPIN configured, enforce lock screen on fresh app launch / restart
+      const hasMpin = getStoredMpinRecord();
+      const isMpinUnlocked = typeof window !== 'undefined' && sessionStorage.getItem('cruvels_mpin_unlocked') === 'true';
+      if (hasMpin && !isMpinUnlocked) {
+        if (mounted) router.replace('/login');
+        return;
+      }
+
       fetchSessionAndUnread();
     });
 

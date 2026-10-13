@@ -3,6 +3,7 @@
 import React, { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { validateTabSession, clearTabSession } from '@/lib/auth/client-session';
+import { getStoredMpinRecord } from '@/lib/auth/mpin-crypto';
 
 export default function RootPage() {
   const router = useRouter();
@@ -23,6 +24,15 @@ export default function RootPage() {
         clearTimeout(timer);
         clearTabSession();
         await fetch('/api/auth/logout', { method: 'POST' }).catch(() => {});
+        if (mounted) router.replace('/login');
+        return;
+      }
+
+      // If this device has an MPIN configured, check if current session is unlocked
+      const hasMpin = getStoredMpinRecord();
+      const isMpinUnlocked = typeof window !== 'undefined' && sessionStorage.getItem('cruvels_mpin_unlocked') === 'true';
+      if (hasMpin && !isMpinUnlocked) {
+        clearTimeout(timer);
         if (mounted) router.replace('/login');
         return;
       }
