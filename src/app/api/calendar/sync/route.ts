@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireActiveUser, handleApiError } from '@/lib/security/authorization';
 import { dataStore } from '@/lib/db/store';
 import { checkRateLimit } from '@/lib/security/rate-limit';
-import { syncCalendarIntegration, syncGoogleHolidays } from '@/lib/calendar/sync-service';
+import { syncGoogleHolidays } from '@/lib/calendar/sync-service';
 import {
   buildGoogleAuthUrl,
   resolveRedirectUri,
@@ -22,13 +22,6 @@ export async function POST(req: NextRequest) {
         { error: 'Calendar sync requests are throttled. Please wait a few moments.', success: false },
         { status: 429 }
       );
-    }
-
-    let body: any = {};
-    try {
-      body = await req.json();
-    } catch {
-      // Empty body is acceptable
     }
 
     // 1. Check if user has connected Google Calendar via OAuth2
