@@ -220,16 +220,19 @@ export default function AttendancePage() {
     }
   };
 
-  const handleTriggerSync = async (isSample = false) => {
+  const handleTriggerSync = async () => {
     setSyncing(true);
     setError(null);
     try {
       const res = await fetch('/api/calendar/sync', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sample: isSample }),
       });
       const data = await res.json();
+      if (res.status === 401 && data.requires_auth && data.auth_url) {
+        window.location.href = data.auth_url;
+        return;
+      }
       if (res.ok && data.success) {
         setNotification(data.message || 'Calendars synced successfully!');
         const [schedRes, intRes] = await Promise.all([
@@ -246,7 +249,7 @@ export default function AttendancePage() {
         }
         setTimeout(() => setNotification(null), 5000);
       } else {
-        setError(data.error || 'Failed to sync calendar.');
+        setError(data.error || data.message || 'Failed to sync calendar.');
       }
     } catch {
       setError('Network connection error while syncing calendars.');
@@ -1886,26 +1889,26 @@ export default function AttendancePage() {
                 </button>
               </div>
 
-              {/* Instant 1-Click Quick Demo Sync Action */}
+              {/* Real Google Calendar Sync Action */}
               <div className="rounded-lg p-4 space-y-2.5" style={{ background: 'var(--teal-wash)', border: '1px solid var(--line-soft)' }}>
                 <div className="flex items-center justify-between gap-3">
                   <div>
                     <h4 className="text-xs font-bold flex items-center gap-1.5" style={{ color: 'var(--ink)' }}>
-                      <Sparkles className="h-4 w-4" style={{ color: 'var(--teal)' }} />
-                      <span>1-Click Test Sync (Google Meet & Teams Standups)</span>
+                      <CalendarDays className="h-4 w-4" style={{ color: 'var(--teal)' }} />
+                      <span>Google Calendar Synchronization</span>
                     </h4>
                     <p className="text-[11px] mt-0.5" style={{ color: 'var(--muted)' }}>
-                      Instantly sync sample recurring Google Meet and MS Teams team syncs for testing right now.
+                      Synchronize your live meetings, appointments, and shifts directly from Google Workspace.
                     </p>
                   </div>
                   <button
                     type="button"
                     disabled={syncing}
-                    onClick={() => handleTriggerSync(true)}
+                    onClick={() => handleTriggerSync()}
                     className="shrink-0 btn-primary text-xs font-bold"
                   >
                     <RefreshCw className={`h-3.5 w-3.5 ${syncing ? 'animate-spin' : ''}`} />
-                    <span>{syncing ? 'Syncing...' : 'Sync Sample Feeds'}</span>
+                    <span>{syncing ? 'Syncing...' : 'Sync Calendar'}</span>
                   </button>
                 </div>
               </div>
