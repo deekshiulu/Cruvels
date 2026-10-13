@@ -178,7 +178,7 @@ export default function GoogleDrivePage() {
               Google Drive<br></br> Workspace Explorer
             </h1>
             <p className="text-xs mt-0.5" style={{ color: 'var(--muted)' }}>
-              Controlled Workspace Access, Squad Deliverables & Official Cruvels Resources
+              Controlled Workspace Access, Squad Deliverables<br></br> & Official Cruvels Resources
             </p>
           </div>
           <button
