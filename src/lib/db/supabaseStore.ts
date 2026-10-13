@@ -2062,6 +2062,30 @@ export class SupabaseDataStore {
     await db().from('push_subscriptions').delete().eq('id', id);
   }
 
+  private supabaseFcmTokens: Map<string, Set<string>> = new Map();
+
+  public async saveUserFcmToken(userId: string, token: string): Promise<void> {
+    if (!this.supabaseFcmTokens.has(userId)) {
+      this.supabaseFcmTokens.set(userId, new Set());
+    }
+    this.supabaseFcmTokens.get(userId)!.add(token);
+    try {
+      await db().from('users').update({ fcm_device_token: token }).eq('id', userId);
+    } catch {}
+  }
+
+  public async getUserFcmTokens(userId: string): Promise<string[]> {
+    const mem = this.supabaseFcmTokens.get(userId);
+    const tokens = mem ? Array.from(mem) : [];
+    try {
+      const { data } = await db().from('users').select('fcm_device_token').eq('id', userId).single();
+      if (data?.fcm_device_token && !tokens.includes(data.fcm_device_token)) {
+        tokens.push(data.fcm_device_token);
+      }
+    } catch {}
+    return tokens;
+  }
+
   public async importSnapshot(source: {
     users: Map<string, User>;
     aliases: Map<string, MailAlias>;

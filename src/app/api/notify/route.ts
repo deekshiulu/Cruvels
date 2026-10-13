@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getApps, initializeApp, cert, App } from 'firebase-admin/app';
 import { getMessaging, Message } from 'firebase-admin/messaging';
+import { dataStore } from '@/lib/db/store';
 
 // Initialize Firebase Admin only once to prevent hot-reload crashes
 function getFirebaseAdminApp(): App | null {
@@ -33,11 +34,20 @@ function getFirebaseAdminApp(): App | null {
 
 export async function POST(req: Request) {
   try {
-    const { deviceToken, title, body, data } = await req.json();
+    const { deviceToken, recipientToken, userId, title, body, data } = await req.json();
 
-    if (!deviceToken || !title) {
+    let targetTokens: string[] = [];
+    const directToken = deviceToken || recipientToken;
+    if (directToken && typeof directToken === 'string') {
+      targetTokens.push(directToken);
+    } else if (userId && typeof userId === 'string') {
+      const userTokens = await dataStore.getUserFcmTokens(userId);
+      targetTokens.push(...userTokens);
+    }
+
+    if (targetTokens.length === 0 || !title) {
       return NextResponse.json(
-        { success: false, error: 'deviceToken and title are required.' },
+        { success: false, error: 'deviceToken (or valid userId) and title are required.' },
         { status: 400 }
       );
     }
@@ -55,41 +65,43 @@ export async function POST(req: Request) {
 
     const messaging = getMessaging(app);
 
-    const message: Message = {
-      token: deviceToken,
-      notification: {
-        title,
-        body: body || '',
-      },
-      data: data ? Object.fromEntries(Object.entries(data).map(([k, v]) => [k, String(v)])) : {},
-      // ⚡ CRITICAL FOR INSTANT ANDROID DELIVERY (bypasses Doze mode)
-      android: {
-        priority: 'high',
-        notification: {
-          sound: 'default',
-          channelId: 'cruvels_urgent_notifications',
-          priority: 'max',
-        },
-      },
-      // ⚡ CRITICAL FOR INSTANT IOS DELIVERY (wakes device immediately)
-      apns: {
-        payload: {
-          aps: {
-            sound: 'default',
-            contentAvailable: true,
+    // Send the message directly through FCM API for all target tokens
+    const responses = await Promise.all(
+      targetTokens.map((token) =>
+        messaging.send({
+          token,
+          notification: {
+            title,
+            body: body || '',
           },
-        },
-        headers: {
-          'apns-priority': '10',
-          'apns-push-type': 'alert',
-        },
-      },
-    };
+          data: data ? Object.fromEntries(Object.entries(data).map(([k, v]) => [k, String(v)])) : {},
+          // ⚡ CRITICAL FOR INSTANT ANDROID DELIVERY (bypasses Doze mode)
+          android: {
+            priority: 'high',
+            notification: {
+              sound: 'default',
+              channelId: 'cruvels_urgent_notifications',
+              priority: 'max',
+            },
+          },
+          // ⚡ CRITICAL FOR INSTANT IOS DELIVERY (wakes device immediately)
+          apns: {
+            payload: {
+              aps: {
+                sound: 'default',
+                contentAvailable: true,
+              },
+            },
+            headers: {
+              'apns-priority': '10',
+              'apns-push-type': 'alert',
+            },
+          },
+        })
+      )
+    );
 
-    // Send the message directly through FCM API
-    const response = await messaging.send(message);
-
-    return NextResponse.json({ success: true, messageId: response });
+    return NextResponse.json({ success: true, messageId: responses[0], count: responses.length });
   } catch (error: any) {
     console.error('[FCM Send Error]:', error);
     return NextResponse.json(

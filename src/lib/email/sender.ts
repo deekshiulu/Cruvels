@@ -6,6 +6,7 @@ import { validateEmailString, validateSafeHeader } from '../security/authorizati
 import { evaluateEmailOwnership } from './ownership';
 import { logAuditEvent } from '../audit/logger';
 import { generateRfcMessageId, normalizeRfcMessageId, textToEmailHtml } from './rfc';
+import { sendFcmNotificationToUser } from '../notifications/fcm';
 
 // In-Memory Idempotency Cache (5 min window) with auto-pruning
 const idempotencyCache = new Map<string, { result: OutboundSendResult; timestamp: number }>();
@@ -175,6 +176,18 @@ export async function sendAuthorizedEmail(
       message: `From ${user.name} (${enforcedFrom}) - ${snippet.slice(0, 80)}`,
       link_url: `/mail/${inboxMsg.id}`,
     });
+
+    // ⚡ Instantly trigger the high-priority push notification banner on the user's phone
+    void sendFcmNotificationToUser(match.matchedUser.id, {
+      title: `New Mail from ${user.name}`,
+      body: safeSubject,
+      data: {
+        messageId: inboxMsg.id,
+        sender: user.name,
+        from: enforcedFrom,
+        route: `/mail/${inboxMsg.id}`,
+      },
+    }).catch((err) => console.error('[FCM Internal Mail Error]', err));
 
     for (const att of safeAttachments) {
       await dataStore.createAttachment({

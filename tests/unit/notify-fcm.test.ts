@@ -14,7 +14,7 @@ describe('Instant High-Priority FCM Push Notification Route', () => {
 
     expect(res.status).toBe(400);
     expect(data.success).toBe(false);
-    expect(data.error).toContain('deviceToken and title are required');
+    expect(data.error).toContain('and title are required');
   });
 
   it('gracefully returns 503 error if Firebase Admin environment variables are unset', async () => {

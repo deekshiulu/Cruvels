@@ -17,6 +17,23 @@ export async function POST(req: NextRequest) {
   try {
     const user = await requireActiveUser(req);
     const body = await req.json();
+
+    // ⚡ Direct FCM Device Token Registration from Flutter Mobile App
+    if (body.fcmToken && typeof body.fcmToken === 'string') {
+      await dataStore.saveUserFcmToken(user.id, body.fcmToken.trim());
+      await logAuditEvent({
+        userId: user.id,
+        action: 'DEVICE_NOTIFICATIONS_LINKED',
+        resourceType: 'FCM_TOKEN',
+        metadata: { device: body.deviceName || 'Mobile App' },
+        req,
+      });
+      return NextResponse.json({
+        success: true,
+        message: 'Mobile device registered for instant push notifications.',
+      });
+    }
+
     const parsed = SubscribeSchema.safeParse(body);
     if (!parsed.success) {
       return NextResponse.json(

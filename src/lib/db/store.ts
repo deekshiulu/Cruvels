@@ -840,6 +840,7 @@ export class UnifiedDataStore {
   public notificationPreferences: Map<string, NotificationPreference> = new Map();
   public pushSubscriptions: PushSubscriptionItem[] = [];
   public userCalendarIntegrations: UserCalendarIntegration[] = [];
+  public fcmTokens: Record<string, string[]> = {};
   public vapidKeys: { publicKey: string; privateKey: string } | null = null;
   public mailReminders: MailReminder[] = [];
   private attendanceLocks = new Map<string, Promise<void>>();
@@ -3286,6 +3287,20 @@ export class UnifiedDataStore {
     this.pushSubscriptions.push(newSub);
     this.persistToDisk();
     return { ...newSub };
+  }
+
+  public async saveUserFcmToken(userId: string, token: string): Promise<void> {
+    if (!this.fcmTokens[userId]) {
+      this.fcmTokens[userId] = [];
+    }
+    if (!this.fcmTokens[userId].includes(token)) {
+      this.fcmTokens[userId].push(token);
+    }
+    this.persistToDisk();
+  }
+
+  public async getUserFcmTokens(userId: string): Promise<string[]> {
+    return this.fcmTokens[userId] ? [...this.fcmTokens[userId]] : [];
   }
 
   // -------------------------------------------------------------
