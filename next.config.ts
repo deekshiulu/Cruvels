@@ -60,8 +60,10 @@ const nextConfig: NextConfig = {
     ignoreDuringBuilds: true,
   },
 
-  // ⚡ Performance: tree-shake heavy packages
+  // ⚡ Performance: tree-shake heavy packages & stabilize static generation memory on Windows
   experimental: {
+    workerThreads: false,
+    cpus: 1,
     optimizePackageImports: [
       'lucide-react',
       '@supabase/supabase-js',
