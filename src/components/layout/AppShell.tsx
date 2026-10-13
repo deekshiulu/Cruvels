@@ -135,7 +135,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   });
   const [showSoundSettings, setShowSoundSettings] = useState(false);
   const [soundUploadError, setSoundUploadError] = useState<string | null>(null);
-  const soundFileInputRef = useRef<HTMLInputElement>(null);
   const [isOffline, setIsOffline] = useState(() => (typeof window !== 'undefined' ? !navigator.onLine : false));
 
   useEffect(() => {
@@ -1129,23 +1128,19 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                       )}
 
                       <div className="flex items-center gap-1.5 pt-0.5">
-                        <input
-                          type="file"
-                          ref={soundFileInputRef}
-                          accept="audio/mp3,audio/wav,audio/ogg,audio/mpeg,audio/aac"
-                          className="hidden"
-                          onChange={handleSoundFileUpload}
-                        />
-
-                        <button
-                          type="button"
-                          onClick={() => soundFileInputRef.current?.click()}
-                          className="flex-1 py-1.5 px-2.5 rounded-lg border text-[11px] font-semibold flex items-center justify-center gap-1.5 transition-all active:scale-95 shadow-xs"
+                        <label
+                          className="flex-1 py-1.5 px-2.5 rounded-lg border text-[11px] font-semibold flex items-center justify-center gap-1.5 transition-all active:scale-95 shadow-xs cursor-pointer relative select-none"
                           style={{ background: 'var(--surface)', borderColor: 'var(--line)', color: 'var(--ink)' }}
                         >
+                          <input
+                            type="file"
+                            accept="audio/*,.mp3,.wav,.ogg,.aac,.m4a"
+                            className="sr-only absolute inset-0 opacity-0 pointer-events-none w-0 h-0"
+                            onChange={handleSoundFileUpload}
+                          />
                           <Upload className="h-3 w-3" style={{ color: 'var(--teal)' }} />
                           <span>{customSound ? 'Change Sound' : 'Upload Sound'}</span>
-                        </button>
+                        </label>
 
                         <button
                           type="button"
