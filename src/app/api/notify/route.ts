@@ -80,8 +80,9 @@ export async function POST(req: Request) {
             priority: 'high',
             notification: {
               sound: 'default',
-              channelId: 'cruvels_urgent_notifications',
+              channelId: 'high_importance_channel',
               priority: 'max',
+              defaultVibrateTimings: true,
             },
           },
           // ⚡ CRITICAL FOR INSTANT IOS DELIVERY (wakes device immediately)

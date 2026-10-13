@@ -55,8 +55,9 @@ export async function sendFcmNotification(
         priority: 'high',
         notification: {
           sound: 'default',
-          channelId: 'cruvels_urgent_notifications',
+          channelId: 'high_importance_channel',
           priority: 'max',
+          defaultVibrateTimings: true,
         },
       },
       // ⚡ APNs priority 10 forces iOS to wake up immediately
