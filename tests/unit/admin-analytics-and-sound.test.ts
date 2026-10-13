@@ -22,7 +22,7 @@ describe('Admin Analytics Pipeline & Custom Sound Unit Tests', () => {
     });
 
     it('rejects non-admin role with 403 Forbidden', async () => {
-      const allUsers = Array.from(dataStore.users.values());
+      const allUsers = Array.from((dataStore as any).users.values()) as any[];
       const intern = allUsers.find((u) => u.role === 'intern');
       expect(intern).toBeDefined();
 
@@ -38,7 +38,7 @@ describe('Admin Analytics Pipeline & Custom Sound Unit Tests', () => {
     });
 
     it('returns comprehensive workplace analytics for Admin Supervisor', async () => {
-      const allUsers = Array.from(dataStore.users.values());
+      const allUsers = Array.from((dataStore as any).users.values()) as any[];
       const admin = allUsers.find((u) => u.role === 'admin');
       expect(admin).toBeDefined();
 

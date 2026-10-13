@@ -175,10 +175,10 @@ export default function GoogleDrivePage() {
               style={{ fontFamily: 'Bricolage Grotesque, sans-serif', color: 'var(--ink)' }}
             >
               <HardDrive className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-              Google Drive Workspace Explorer
+              Google Drive<br></br> Workspace Explorer
             </h1>
             <p className="text-xs mt-0.5" style={{ color: 'var(--muted)' }}>
-              Controlled Workspace Access, Squad Deliverables & Official Cruvels Resources (§ 12)
+              Controlled Workspace Access, Squad Deliverables & Official Cruvels Resources
             </p>
           </div>
           <button

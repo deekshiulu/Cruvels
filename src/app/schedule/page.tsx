@@ -500,10 +500,10 @@ export default function SchedulePage() {
 
   return (
     <AppShell>
-      <div className="flex flex-col h-full gap-4 max-w-7xl mx-auto w-full pb-8 min-w-0 max-w-full overflow-x-hidden" style={{ color: 'var(--ink)' }}>
+      <div className="flex flex-col min-h-full gap-4 max-w-7xl mx-auto w-full pb-8 min-w-0 max-w-full" style={{ color: 'var(--ink)' }}>
         
         {/* TOP HERO HEADER */}
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pb-3 border-b border-[var(--line)] min-w-0 max-w-full">
+        <div className="shrink-0 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pb-3 border-b border-[var(--line)] min-w-0 max-w-full">
           <div className="min-w-0 flex-1 w-full sm:w-auto">
             <div className="flex items-center gap-2.5 min-w-0">
               <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-blue-500/10 border border-blue-500/20 text-blue-600 dark:text-blue-400 shadow-xs">
@@ -608,7 +608,7 @@ export default function SchedulePage() {
         )}
 
         {/* EXECUTIVE KPI PULSE BAR */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 min-w-0 max-w-full">
+        <div className="shrink-0 grid grid-cols-2 md:grid-cols-4 gap-3 min-w-0 max-w-full">
           {/* Card 1: Next Holiday */}
           <div
             className="p-3.5 rounded-2xl border transition-all hover:border-amber-500/40 relative overflow-hidden group min-w-0"
@@ -704,7 +704,7 @@ export default function SchedulePage() {
         </div>
 
         {/* CONTROLS: VIEW SWITCHER + VIBRANT CATEGORY PILLS */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 p-2 rounded-2xl border border-[var(--line)] bg-[var(--surface)] min-w-0 max-w-full overflow-hidden">
+        <div className="shrink-0 flex flex-col md:flex-row md:items-center justify-between gap-3 p-2.5 rounded-2xl border border-[var(--line)] bg-[var(--surface)] min-w-0 max-w-full">
           {/* Segmented View Switcher */}
           <div className="flex items-center gap-1 p-1 rounded-xl bg-[var(--paper)] border border-[var(--line)] shrink-0 self-start md:self-auto overflow-x-auto max-w-full scrollbar-none">
             <button
@@ -1026,7 +1026,7 @@ export default function SchedulePage() {
           </div>
         ) : (
           /* CLASSIC MONTH VIEW + DYNAMIC RICH SIDEBAR */
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 min-w-0 max-w-full">
+          <div className="shrink-0 grid grid-cols-1 lg:grid-cols-12 gap-4 min-w-0 max-w-full">
             
             {/* LEFT / CENTER: FULL-HEIGHT CALENDAR GRID (8 of 12 cols) */}
             <div

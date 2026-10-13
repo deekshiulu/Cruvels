@@ -935,7 +935,7 @@ export default function AttendancePage() {
                 className="btn-primary text-xs font-bold"
               >
                 <Plus className="h-4 w-4" />
-                <span>+ Add Company Holiday / Event</span>
+                <span> Add Company Holiday / Event</span>
               </button>
             )}
           </div>
