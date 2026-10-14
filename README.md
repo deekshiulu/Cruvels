@@ -6,6 +6,9 @@ An enterprise-grade, zero-trust workplace management platform and isolated email
 
 ## 🚀 Key Highlights & Architecture
 
+[![Architecture diagram of deekshiulu/cruvels](https://gitdiagram.com/deekshiulu/cruvels/diagram.png)](https://gitdiagram.com/deekshiulu/cruvels?utm_source=readme&utm_medium=picture)
+
+
 ### 1. Enterprise Workforce Operations (Stage 2)
 - **Employee Directory & PII Masking**: Role-based telemetry access where sensitive fields (personal phone, private email, leave balance allocations) are masked from peer interns and only visible to self and authorized Administrators.
 - **IST Attendance Engine**: Timezone-accurate (Indian Standard Time) attendance calculations with single-punch enforcement per calendar day and automated conflict prevention against approved leaves.
