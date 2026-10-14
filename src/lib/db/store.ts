@@ -47,7 +47,7 @@ import {
   MailReminder,
 } from './types';
 
-import { hashPassword, verifyPassword } from '../auth/password';
+import { hashPassword, verifyPassword, hashMpin, verifyMpin } from '../auth/password';
 import { getPasswordPolicyError } from '../auth/password-policy';
 import { getIndianDateString, getIndianTimeString } from '../utils/date';
 
@@ -958,6 +958,7 @@ export class UnifiedDataStore {
                 this.users.set(u.id, {
                   ...u,
                   must_change_password: Boolean(u.must_change_password),
+                  mpin_hash: u.mpin_hash || null,
                 });
               }
             }
@@ -1022,7 +1023,13 @@ export class UnifiedDataStore {
     this.auditLogs = [];
     this.checkpoints.clear();
 
-    for (const u of SEED_USERS) this.users.set(u.id, { ...u, must_change_password: Boolean(u.must_change_password) });
+    for (const u of SEED_USERS) {
+      this.users.set(u.id, {
+        ...u,
+        must_change_password: Boolean(u.must_change_password),
+        mpin_hash: u.mpin_hash || hashMpin('1234', DEV_SEED_SALT),
+      });
+    }
     for (const a of SEED_ALIASES) this.aliases.set(a.id, { ...a });
 
     this.departments = JSON.parse(JSON.stringify(SEED_DEPARTMENTS));
@@ -3026,6 +3033,37 @@ export class UnifiedDataStore {
 
     this.persistToDisk();
     return { success: true };
+  }
+
+  // -------------------------------------------------------------
+  // CENTRALIZED ACCOUNT MPIN (PERSISTENT DATABASE BACKED)
+  // -------------------------------------------------------------
+
+  public async setUserMpin(userId: string, pin: string): Promise<{ success: boolean; error?: string }> {
+    const cleanPin = pin.trim();
+    if (!/^\d{4}$/.test(cleanPin)) {
+      return { success: false, error: 'MPIN must be exactly 4 numeric digits.' };
+    }
+    const user = await this.getUserById(userId);
+    if (!user) {
+      return { success: false, error: 'User account not found.' };
+    }
+    const mpin_hash = hashMpin(cleanPin);
+    await this.updateUser(userId, { mpin_hash });
+    return { success: true };
+  }
+
+  public async verifyUserMpin(userId: string, pin: string): Promise<boolean> {
+    const cleanPin = pin.trim();
+    if (!/^\d{4}$/.test(cleanPin)) return false;
+    const user = await this.getUserById(userId);
+    if (!user || !user.mpin_hash) return false;
+    return verifyMpin(cleanPin, user.mpin_hash);
+  }
+
+  public async hasUserMpin(userId: string): Promise<boolean> {
+    const user = await this.getUserById(userId);
+    return Boolean(user && user.mpin_hash);
   }
 
   // -------------------------------------------------------------

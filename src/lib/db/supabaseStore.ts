@@ -44,7 +44,7 @@ import {
   PublicHolidayDefinition,
   MailReminder,
 } from './types';
-import { hashPassword, verifyPassword } from '../auth/password';
+import { hashPassword, verifyPassword, hashMpin, verifyMpin } from '../auth/password';
 import { getPasswordPolicyError } from '../auth/password-policy';
 import { getIndianDateString, getIndianTimeString } from '../utils/date';
 
@@ -177,6 +177,33 @@ export class SupabaseDataStore {
 
   public async updateUserStatus(userId: string, status: UserStatus): Promise<User | null> {
     return this.updateUser(userId, { status });
+  }
+
+  public async setUserMpin(userId: string, pin: string): Promise<{ success: boolean; error?: string }> {
+    const cleanPin = pin.trim();
+    if (!/^\d{4}$/.test(cleanPin)) {
+      return { success: false, error: 'MPIN must be exactly 4 numeric digits.' };
+    }
+    const user = await this.getUserById(userId);
+    if (!user) {
+      return { success: false, error: 'User account not found.' };
+    }
+    const mpin_hash = hashMpin(cleanPin);
+    await this.updateUser(userId, { mpin_hash });
+    return { success: true };
+  }
+
+  public async verifyUserMpin(userId: string, pin: string): Promise<boolean> {
+    const cleanPin = pin.trim();
+    if (!/^\d{4}$/.test(cleanPin)) return false;
+    const user = await this.getUserById(userId);
+    if (!user || !user.mpin_hash) return false;
+    return verifyMpin(cleanPin, user.mpin_hash);
+  }
+
+  public async hasUserMpin(userId: string): Promise<boolean> {
+    const user = await this.getUserById(userId);
+    return Boolean(user && user.mpin_hash);
   }
 
   public async listAllAliases(): Promise<MailAlias[]> {

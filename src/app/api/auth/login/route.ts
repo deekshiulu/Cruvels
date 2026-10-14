@@ -154,6 +154,7 @@ export async function POST(req: NextRequest) {
         assignedAliases: activeAliases,
         primaryAlias: activeAliases[0] || `${user.username}@cruvels.com`,
         mustChangePassword,
+        hasMpin: Boolean(user.mpin_hash),
         employeeId: employee?.id || null,
         designation: employee?.designation || null,
         squad: group?.name || null,

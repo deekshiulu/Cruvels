@@ -12,6 +12,7 @@ export interface User {
   updated_at: string;
   last_login_at?: string | null;
   must_change_password?: boolean;
+  mpin_hash?: string | null;
 }
 
 export interface MailAlias {

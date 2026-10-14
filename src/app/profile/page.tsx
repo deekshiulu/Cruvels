@@ -154,7 +154,11 @@ function ProfileContent() {
     setMpinModalError(null);
 
     try {
-      const res = await fetch('/api/auth/mpin/setup', { method: 'POST' });
+      const res = await fetch('/api/auth/mpin/setup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pin }),
+      });
       const data = await res.json();
       if (!res.ok || !data.success) {
         setMpinModalError(data.error || 'Failed to initialize MPIN encryption key.');

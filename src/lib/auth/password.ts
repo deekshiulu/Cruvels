@@ -42,3 +42,25 @@ export function verifyPassword(password: string, storedHash: string): boolean {
 
   return false;
 }
+
+/**
+ * Validates and hashes a 4-digit MPIN using salted PBKDF2 for persistent database storage.
+ */
+export function hashMpin(pin: string, customSalt?: string): string {
+  const cleanPin = pin.trim();
+  if (!/^\d{4}$/.test(cleanPin)) {
+    throw new Error('MPIN must be exactly 4 numeric digits.');
+  }
+  return hashPassword(cleanPin, customSalt);
+}
+
+/**
+ * Validates an entered 4-digit MPIN against the stored hash in constant time.
+ */
+export function verifyMpin(pin: string, storedHash?: string | null): boolean {
+  if (!pin || !storedHash) return false;
+  const cleanPin = pin.trim();
+  if (!/^\d{4}$/.test(cleanPin)) return false;
+  return verifyPassword(cleanPin, storedHash);
+}
+

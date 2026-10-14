@@ -129,6 +129,7 @@ function LoginForm() {
   const [setupLoading, setSetupLoading] = useState(false);
   const [setupShake, setSetupShake] = useState(false);
   const [tempSessionPayload, setTempSessionPayload] = useState<{ token: string; user: MpinStoredUser } | null>(null);
+  const [isAccountMpinAlreadySet, setIsAccountMpinAlreadySet] = useState(false);
 
   // Login form state
   const [usernameOrEmail, setUsernameOrEmail] = useState('');
@@ -328,6 +329,7 @@ function LoginForm() {
         body: JSON.stringify({
           token: decrypted.token,
           userId: savedMpinRecord.user.id,
+          pin,
         }),
       });
 
@@ -405,10 +407,64 @@ function LoginForm() {
   /* ──────────────────────────────────────────────────────────────────────────
      MPIN SETUP LOGIC (First Login Flow)
      ────────────────────────────────────────────────────────────────────────── */
+  const handleVerifyExistingMpin = async (pin: string) => {
+    if (!tempSessionPayload) {
+      window.location.href = '/dashboard';
+      return;
+    }
+
+    setSetupLoading(true);
+    setSetupError(null);
+
+    try {
+      const res = await fetch('/api/auth/mpin/setup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          mode: 'verify_existing',
+          pin,
+          token: tempSessionPayload.token,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        setSetupShake(true);
+        setTimeout(() => setSetupShake(false), 500);
+        setSetupError(data.error || 'Incorrect Account MPIN. Please enter your existing 4-digit PIN.');
+        setSetupPin('');
+        setSetupLoading(false);
+        return;
+      }
+
+      // Bind the existing verified account MPIN to this device
+      const record = await encryptMpinSession(pin, {
+        token: data.token || tempSessionPayload.token,
+        user: data.user || tempSessionPayload.user,
+      });
+      saveMpinRecord(record);
+      setSavedMpinRecord(record);
+      if (typeof window !== 'undefined') {
+        sessionStorage.setItem('cruvels_mpin_unlocked', 'true');
+      }
+
+      if (tempSessionPayload.user?.mustChangePassword) {
+        window.location.href = '/profile?force=password';
+      } else if (tempSessionPayload.user?.role === 'admin') {
+        window.location.href = '/admin';
+      } else {
+        window.location.href = '/dashboard';
+      }
+    } catch {
+      setSetupError('Network error while verifying MPIN.');
+      setSetupLoading(false);
+    }
+  };
+
   const handleSetupKeyClick = (digit: string) => {
     if (setupLoading) return;
     if (digit === 'backspace') {
-      if (setupStep === 'enter') {
+      if (isAccountMpinAlreadySet || setupStep === 'enter') {
         setSetupPin((prev) => prev.slice(0, -1));
       } else {
         setSetupConfirmPin((prev) => prev.slice(0, -1));
@@ -417,12 +473,21 @@ function LoginForm() {
       return;
     }
     if (digit === 'clear') {
-      if (setupStep === 'enter') {
-        setSetupPin('');
-      } else {
-        setSetupConfirmPin('');
-      }
+      setSetupPin('');
+      setSetupConfirmPin('');
       setSetupError(null);
+      return;
+    }
+
+    if (isAccountMpinAlreadySet) {
+      if (setupPin.length < 4) {
+        const next = setupPin + digit;
+        setSetupPin(next);
+        setSetupError(null);
+        if (next.length === 4) {
+          handleVerifyExistingMpin(next);
+        }
+      }
       return;
     }
 
@@ -469,7 +534,30 @@ function LoginForm() {
     setSetupError(null);
 
     try {
-      const record = await encryptMpinSession(pin, tempSessionPayload);
+      // 1. Save MPIN permanently into the database
+      const saveRes = await fetch('/api/auth/mpin/setup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          pin,
+          token: tempSessionPayload.token,
+        }),
+      });
+
+      const saveData = await saveRes.json();
+      if (!saveRes.ok || !saveData.success) {
+        setSetupShake(true);
+        setTimeout(() => setSetupShake(false), 500);
+        setSetupError(saveData.error || 'Failed to save MPIN to database.');
+        setSetupLoading(false);
+        return;
+      }
+
+      // 2. Encrypt and save device record
+      const record = await encryptMpinSession(pin, {
+        token: saveData.token || tempSessionPayload.token,
+        user: saveData.user || tempSessionPayload.user,
+      });
       saveMpinRecord(record);
       setSavedMpinRecord(record);
       if (typeof window !== 'undefined') {
@@ -484,7 +572,7 @@ function LoginForm() {
         window.location.href = '/dashboard';
       }
     } catch {
-      setSetupError('Unable to encrypt MPIN. Proceeding to workspace.');
+      setSetupError('Unable to save MPIN. Proceeding to workspace.');
       setTimeout(() => {
         window.location.href = '/dashboard';
       }, 1000);
@@ -578,8 +666,10 @@ function LoginForm() {
 
       // Check if MPIN is already configured for this user on this device
       const existing = getStoredMpinRecord();
+      const hasAccountMpin = Boolean(data.user?.hasMpin);
+
       if (!existing || existing.user.id !== data.user?.id) {
-        // Prompt user to set up their 4-digit MPIN for future one-tap access
+        // Prompt user to link existing account MPIN or create one
         setTempSessionPayload({
           token: data.token,
           user: {
@@ -594,6 +684,7 @@ function LoginForm() {
             department: data.user.department,
           },
         });
+        setIsAccountMpinAlreadySet(hasAccountMpin);
         setSetupStep('enter');
         setSetupPin('');
         setSetupConfirmPin('');
@@ -1003,19 +1094,29 @@ function LoginForm() {
                 </div>
 
                 <span className="text-[10px] font-bold tracking-wider uppercase text-blue-600 dark:text-blue-400">
-                  {setupStep === 'enter' ? 'Step 1 of 2: Create MPIN' : 'Step 2 of 2: Confirm MPIN'}
+                  {isAccountMpinAlreadySet
+                    ? 'Account MPIN Detected'
+                    : setupStep === 'enter'
+                    ? 'Step 1 of 2: Create MPIN'
+                    : 'Step 2 of 2: Confirm MPIN'}
                 </span>
 
                 <h2
                   className="text-xl font-black tracking-tight mt-1"
                   style={{ fontFamily: 'Bricolage Grotesque, sans-serif', color: 'var(--ink)' }}
                 >
-                  {setupStep === 'enter' ? 'Set Up 4-Digit Quick MPIN' : 'Confirm Your 4-Digit MPIN'}
+                  {isAccountMpinAlreadySet
+                    ? 'Enter Account MPIN'
+                    : setupStep === 'enter'
+                    ? 'Set Up 4-Digit Quick MPIN'
+                    : 'Confirm Your 4-Digit MPIN'}
                 </h2>
 
                 <p className="text-[11px] mt-1 max-w-xs leading-relaxed" style={{ color: 'var(--muted)' }}>
-                  {setupStep === 'enter'
-                    ? 'Create a 4-digit MPIN for instant, one-tap unlocking on this mobile device without re-entering your full password.'
+                  {isAccountMpinAlreadySet
+                    ? 'Enter your single 4-digit Account MPIN to enable quick unlock on this device. Your MPIN is saved in the database across all your devices.'
+                    : setupStep === 'enter'
+                    ? 'Create a 4-digit MPIN for instant, one-tap unlocking across your devices without re-entering your full password.'
                     : 'Re-enter your 4-digit PIN to verify and lock it to this device.'}
                 </p>
               </div>
@@ -1023,7 +1124,7 @@ function LoginForm() {
               {/* 4 PIN Setup Dots */}
               <div className={`flex items-center justify-center gap-4 my-4 ${setupShake ? 'animate-shake' : ''}`}>
                 {[0, 1, 2, 3].map((idx) => {
-                  const currentPin = setupStep === 'enter' ? setupPin : setupConfirmPin;
+                  const currentPin = isAccountMpinAlreadySet || setupStep === 'enter' ? setupPin : setupConfirmPin;
                   const isFilled = currentPin.length > idx;
                   const isCurrent = currentPin.length === idx;
                   return (
@@ -1052,7 +1153,7 @@ function LoginForm() {
               {setupLoading && (
                 <div className="mb-3 flex items-center justify-center gap-2 text-xs font-semibold text-blue-600 dark:text-blue-400 animate-pulse">
                   <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-blue-600 border-t-transparent" />
-                  <span>Encrypting & binding MPIN to device...</span>
+                  <span>{isAccountMpinAlreadySet ? 'Verifying Account MPIN with database...' : 'Saving MPIN to database & binding to device...'}</span>
                 </div>
               )}
 

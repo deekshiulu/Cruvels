@@ -144,4 +144,58 @@ describe('Zero-Trust MPIN Persistent Device Authentication Suite', () => {
     expect(finalCount).toBe(MAX_MPIN_ATTEMPTS);
     expect(getStoredMpinRecord()).toBeNull();
   });
+
+  it('persists single account MPIN in database and verifies across multiple devices', async () => {
+    const users = await dataStore.listUsers();
+    const testUser = users[0];
+    expect(testUser).toBeDefined();
+
+    // 1. Save MPIN in database for the account
+    const saveRes = await dataStore.setUserMpin(testUser.id, '7412');
+    expect(saveRes.success).toBe(true);
+
+    const hasMpin = await dataStore.hasUserMpin(testUser.id);
+    expect(hasMpin).toBe(true);
+
+    // 2. Database verification check
+    const isCorrect = await dataStore.verifyUserMpin(testUser.id, '7412');
+    expect(isCorrect).toBe(true);
+
+    const isWrong = await dataStore.verifyUserMpin(testUser.id, '0000');
+    expect(isWrong).toBe(false);
+
+    // 3. Multi-device simulation: Device 1 and Device 2 authenticate with the single account MPIN
+    // Device 1 unlock via API
+    const reqDevice1 = new NextRequest('http://localhost:3000/api/auth/mpin', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId: testUser.id, pin: '7412' }),
+    });
+    const res1 = await mpinLoginRoute(reqDevice1);
+    const data1 = await res1.json();
+    expect(res1.status).toBe(200);
+    expect(data1.success).toBe(true);
+    expect(data1.user.hasMpin).toBe(true);
+
+    // Device 2 unlock via API using the same single account MPIN
+    const reqDevice2 = new NextRequest('http://localhost:3000/api/auth/mpin', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId: testUser.id, pin: '7412' }),
+    });
+    const res2 = await mpinLoginRoute(reqDevice2);
+    const data2 = await res2.json();
+    expect(res2.status).toBe(200);
+    expect(data2.success).toBe(true);
+    expect(data2.user.id).toBe(testUser.id);
+
+    // Wrong MPIN on any device rejected
+    const reqWrong = new NextRequest('http://localhost:3000/api/auth/mpin', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId: testUser.id, pin: '9999' }),
+    });
+    const resWrong = await mpinLoginRoute(reqWrong);
+    expect(resWrong.status).toBe(401);
+  });
 });
