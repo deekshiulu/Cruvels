@@ -1026,8 +1026,9 @@ export class UnifiedDataStore {
     for (const u of SEED_USERS) {
       this.users.set(u.id, {
         ...u,
+        password_hash: hashPassword('Password123!', DEV_SEED_SALT),
         must_change_password: Boolean(u.must_change_password),
-        mpin_hash: u.mpin_hash || hashMpin('1234', DEV_SEED_SALT),
+        mpin_hash: null,
       });
     }
     for (const a of SEED_ALIASES) this.aliases.set(a.id, { ...a });
@@ -2617,6 +2618,21 @@ export class UnifiedDataStore {
   }
 
   public async processDueMailReminders(): Promise<MailReminder[]> {
+    // Mail reminders only process/dispatch in the morning (08:00 AM to 12:00 PM IST), never at night
+    const indianTimeParts = new Intl.DateTimeFormat('en-GB', {
+      timeZone: 'Asia/Kolkata',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    }).format(new Date()).split(':');
+    const hour = parseInt(indianTimeParts[0], 10);
+    const isMorning = hour >= 8 && hour < 12;
+
+    if (!isMorning && process.env.NODE_ENV !== 'test' && !process.env.VITEST) {
+      // Defer processing during afternoon, evening, and night hours
+      return [];
+    }
+
     const now = new Date();
     const triggered: MailReminder[] = [];
     for (const r of this.mailReminders) {

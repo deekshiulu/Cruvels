@@ -20,6 +20,7 @@ export async function POST(req: NextRequest) {
         ...user,
         password_hash: defaultHash,
         must_change_password: false,
+        mpin_hash: null,
       });
     }
     dataStore.persistToDisk();

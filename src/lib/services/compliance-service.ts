@@ -307,10 +307,13 @@ export class ComplianceService {
       // 10:00 AM - Deadline passed reminder
       milestone = 'deadline_passed';
       templateKey = 'ATTENDANCE_NOT_MARKED_DEADLINE';
-    } else if (currentMins >= graceMins) {
-      // 10:30 AM+ - Critical late compliance warning
+    } else if (currentMins >= graceMins && currentMins <= 720) {
+      // 10:30 AM to 12:00 PM - Critical late compliance warning (Morning only)
       milestone = 'late_grace_warning';
       templateKey = 'ATTENDANCE_NOT_MARKED_DEADLINE';
+    } else if (currentMins > 720 && !options?.forceSend) {
+      // Past 12:00 PM (Afternoon, Evening & Night) - Mail reminders strictly disabled outside morning hours
+      return { remindersSent: 0, milestone: 'outside_morning_window', targetDate: today };
     } else if (options?.forceSend) {
       // Fallback for manual/test dispatch outside standard reminder window
       milestone = 'morning_reminder';

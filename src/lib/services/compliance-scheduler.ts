@@ -1,4 +1,4 @@
-import { complianceService, getIndianTime24 } from './compliance-service';
+import { complianceService, getIndianTime24, timeStringToMinutes } from './compliance-service';
 import { getIndianDateString } from '@/lib/utils/date';
 import { dataStore } from '../db/store';
 
@@ -60,6 +60,12 @@ export async function executeSchedulerTick(): Promise<{
     const rules = await dataStore.getAttendanceRules();
     const isWorking = await complianceService.isWorkingDay(today, rules);
     const isHoliday = complianceService.isHoliday(today);
+
+    const currentMins = timeStringToMinutes(currentTime);
+    // Attendance reminders strictly dispatch in the morning (08:00 AM to 12:00 PM IST), never at night
+    if (currentMins === null || currentMins < 480 || currentMins > 720) {
+      return { checked: true, remindersSent: 0, reason: 'outside_morning_window' };
+    }
 
     if (!isWorking || isHoliday) {
       return { checked: true, remindersSent: 0, reason: isHoliday ? 'holiday' : 'non_working_day' };
