@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, Suspense } from 'react';
+import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
   ShieldCheck,
@@ -1623,8 +1624,19 @@ function LoginForm() {
           </span>
         </div>
 
+        {/* Legal Links */}
+        <div className="mt-4 flex items-center justify-center gap-3 text-[11px] text-[var(--muted)]">
+          <Link href="/terms" className="hover:text-[var(--ink)] hover:underline transition-colors">
+            Terms & Conditions
+          </Link>
+          <span>•</span>
+          <Link href="/privacy" className="hover:text-[var(--ink)] hover:underline transition-colors">
+            Privacy Policy
+          </Link>
+        </div>
+
         {/* Footer Copyright */}
-        <p className="mt-4 text-center text-[11px] text-[var(--muted)]">
+        <p className="mt-2 text-center text-[11px] text-[var(--muted)]">
           Cruvels Workplace OS • Zero-Trust Mobile Platform © 2026
         </p>
       </div>

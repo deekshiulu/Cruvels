@@ -3,6 +3,8 @@ import { AUTH_COOKIE_NAME, verifySignedSessionJwt } from '@/lib/auth/jwt-edge';
 
 const PUBLIC_PATHS = [
   '/login',
+  '/terms',
+  '/privacy',
   '/api/auth/login',
   '/api/auth/forgot-password',
   '/api/health',
